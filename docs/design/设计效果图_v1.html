@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TidyLab · 界面设计效果图 v1</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root{
+    --bg-1:#151228; --bg-2:#241a45; --bg-3:#101b3a;
+    --blob-1:rgba(124,92,255,.45); --blob-2:rgba(45,212,191,.28); --blob-3:rgba(255,107,157,.30);
+    --glass:rgba(255,255,255,.07);
+    --glass-strong:rgba(255,255,255,.11);
+    --stroke:rgba(255,255,255,.14);
+    --stroke-hi:rgba(255,255,255,.28);
+    --text:#f2f3f8; --text-2:rgba(242,243,248,.62); --text-3:rgba(242,243,248,.38);
+    --accent:#6a8dff; --accent-2:#a06bff;
+    --ok:#34d399; --warn:#fbbf24; --full:#f87171;
+    --shadow:0 18px 50px rgba(0,0,0,.42);
+    --shadow-sm:0 8px 26px rgba(0,0,0,.30);
+  }
+  body.light{
+    --bg-1:#dde5f1; --bg-2:#e9eef8; --bg-3:#d3dcec;
+    --blob-1:rgba(124,92,255,.22); --blob-2:rgba(45,180,191,.20); --blob-3:rgba(255,140,170,.22);
+    --glass:rgba(255,255,255,.55);
+    --glass-strong:rgba(255,255,255,.72);
+    --stroke:rgba(255,255,255,.85);
+    --stroke-hi:rgba(255,255,255,.95);
+    --text:#1d2436; --text-2:rgba(29,36,54,.62); --text-3:rgba(29,36,54,.38);
+    --shadow:0 18px 44px rgba(60,80,140,.20);
+    --shadow-sm:0 8px 22px rgba(60,80,140,.14);
+  }
+  html,body{ min-height:100%; }
+  body{
+    font-family:-apple-system,"SF Pro Display","PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--text);
+    background:linear-gradient(135deg,var(--bg-1) 0%,var(--bg-2) 48%,var(--bg-3) 100%) fixed;
+    overflow-x:hidden;
+    transition:background .5s;
+  }
+  /* ---------- 环境光斑 ---------- */
+  .blob{ position:fixed; border-radius:50%; filter:blur(90px); pointer-events:none; z-index:0; }
+  .b1{ width:520px; height:520px; background:var(--blob-1); top:-140px; right:-100px; }
+  .b2{ width:420px; height:420px; background:var(--blob-2); bottom:-120px; left:12%; }
+  .b3{ width:360px; height:360px; background:var(--blob-3); top:36%; left:44%; opacity:.8; }
+
+  /* ---------- 玻璃卡片基类 ---------- */
+  .glass{
+    background:var(--glass);
+    backdrop-filter:blur(26px) saturate(1.4);
+    -webkit-backdrop-filter:blur(26px) saturate(1.4);
+    border:1px solid var(--stroke);
+    border-radius:24px;
+    box-shadow:var(--shadow-sm);
+  }
+  .lift{ transition:transform .25s ease, box-shadow .25s ease, border-color .25s; }
+  .lift:hover{ transform:translateY(-4px); box-shadow:var(--shadow); border-color:var(--stroke-hi); }
+
+  /* ---------- 左侧导航 ---------- */
+  .sidebar{
+    position:fixed; left:26px; top:50%; transform:translateY(-50%);
+    width:78px; padding:18px 0; z-index:50;
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+  }
+  .nav-btn{
+    width:52px; height:52px; border-radius:18px; border:1px solid transparent;
+    background:transparent; color:var(--text-2); font-size:21px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; position:relative;
+    transition:all .22s ease;
+  }
+  .nav-btn:hover{ color:var(--text); background:var(--glass); transform:translateY(-2px); }
+  .nav-btn.active{
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    color:#fff; box-shadow:0 10px 24px rgba(106,141,255,.45);
+  }
+  .nav-btn .tip{
+    position:absolute; left:64px; white-space:nowrap; font-size:12.5px;
+    background:var(--glass-strong); border:1px solid var(--stroke); color:var(--text);
+    padding:6px 12px; border-radius:10px; opacity:0; pointer-events:none;
+    transition:opacity .2s; backdrop-filter:blur(20px);
+  }
+  .nav-btn:hover .tip{ opacity:1; }
+
+  /* ---------- 顶部栏 ---------- */
+  .topbar{
+    position:sticky; top:22px; z-index:40;
+    margin:22px 40px 26px 132px; padding:14px 22px;
+    display:flex; align-items:center; gap:18px;
+  }
+  .brand{ display:flex; align-items:center; gap:11px; font-weight:700; font-size:17px; letter-spacing:.3px; }
+  .brand .logo{
+    width:38px; height:38px; border-radius:13px; display:flex; align-items:center; justify-content:center; font-size:18px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2)); box-shadow:0 8px 20px rgba(106,141,255,.45);
+  }
+  .search{
+    flex:1; max-width:520px; display:flex; align-items:center; gap:10px;
+    padding:11px 18px; border-radius:999px; color:var(--text-2); font-size:14px;
+  }
+  .search input{
+    flex:1; background:none; border:none; outline:none; color:var(--text); font-size:14px;
+  }
+  .search input::placeholder{ color:var(--text-3); }
+  .topbar .spacer{ flex:1; }
+  .icon-pill{
+    width:42px; height:42px; border-radius:14px; display:flex; align-items:center; justify-content:center;
+    font-size:17px; cursor:pointer; color:var(--text-2); transition:all .22s;
+  }
+  .icon-pill:hover{ color:var(--text); transform:translateY(-2px); }
+
+  /* ---------- 主内容 ---------- */
+  .main{ margin:0 40px 60px 132px; position:relative; z-index:10; }
+  .screen{ display:none; }
+  .screen.active{ display:block; animation:rise .45s ease both; }
+  @keyframes rise{ from{ opacity:0; transform:translateY(16px);} to{ opacity:1; transform:none;} }
+
+  .page-title{ font-size:26px; font-weight:700; margin:6px 0 4px; }
+  .page-sub{ color:var(--text-2); font-size:13.5px; margin-bottom:22px; }
+
+  .card{ padding:22px; }
+  h3.sec{ font-size:15px; font-weight:650; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+  h3.sec .more{ margin-left:auto; font-size:12.5px; color:var(--text-3); cursor:pointer; }
+  h3.sec .more:hover{ color:var(--text); }
+
+  .chip{
+    display:inline-flex; align-items:center; gap:6px; padding:6px 13px; border-radius:999px;
+    font-size:12px; background:var(--glass); border:1px solid var(--stroke); color:var(--text-2);
+  }
+  .chip.on{ background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#fff; border-color:transparent; }
+  .btn-main{
+    padding:12px 26px; border:none; border-radius:999px; cursor:pointer; color:#fff; font-size:14px; font-weight:600;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    box-shadow:0 10px 26px rgba(106,141,255,.45); transition:all .22s;
+  }
+  .btn-main:hover{ transform:translateY(-2px); box-shadow:0 14px 32px rgba(106,141,255,.55); }
+  .btn-ghost{
+    padding:11px 22px; border-radius:999px; border:1px solid var(--stroke); background:var(--glass);
+    color:var(--text-2); font-size:13.5px; cursor:pointer; transition:all .22s;
+  }
+  .btn-ghost:hover{ color:var(--text); border-color:var(--stroke-hi); }
+
+  /* ===== 总览 ===== */
+  .stats{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
+  .stat{ padding:20px 22px; }
+  .stat .ic{ width:42px; height:42px; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:19px; margin-bottom:12px; }
+  .stat .num{ font-size:26px; font-weight:750; letter-spacing:.5px; }
+  .stat .lbl{ font-size:12.5px; color:var(--text-2); margin-top:3px; }
+
+  .zones{ display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:24px; }
+  .zone-head{ display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .zone-name{ font-weight:650; font-size:15px; }
+  .zone-meta{ margin-left:auto; font-size:12px; color:var(--text-3); }
+  .mini-cabs{ display:flex; gap:10px; }
+  .mini-cab{
+    flex:1; border-radius:14px; padding:10px; background:var(--glass); border:1px solid var(--stroke);
+    transition:all .22s; cursor:pointer;
+  }
+  .mini-cab:hover{ transform:translateY(-3px); border-color:var(--stroke-hi); }
+  .mini-cab .mc-name{ font-size:11px; color:var(--text-2); margin-bottom:8px; display:flex; justify-content:space-between; }
+  .mc-cells{ display:grid; grid-template-columns:repeat(4,1fr); gap:4px; }
+  .mc-cell{ height:14px; border-radius:4px; background:var(--glass); border:1px solid var(--stroke); }
+  .mc-cell.full{ background:linear-gradient(135deg,var(--accent),var(--accent-2)); border-color:transparent; }
+  .mc-cell.part{ background:linear-gradient(135deg,rgba(251,191,36,.85),rgba(251,146,60,.85)); border-color:transparent; }
+
+  .recent-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .item-card{ padding:14px; border-radius:18px; }
+  .item-thumb{
+    height:96px; border-radius:14px; display:flex; align-items:center; justify-content:center;
+    font-size:38px; margin-bottom:11px;
+  }
+  .t1{ background:linear-gradient(135deg,rgba(106,141,255,.35),rgba(160,107,255,.30)); }
+  .t2{ background:linear-gradient(135deg,rgba(45,212,191,.30),rgba(56,189,248,.28)); }
+  .t3{ background:linear-gradient(135deg,rgba(255,107,157,.30),rgba(251,146,60,.28)); }
+  .t4{ background:linear-gradient(135deg,rgba(251,191,36,.30),rgba(250,100,100,.26)); }
+  .item-name{ font-size:13.5px; font-weight:600; }
+  .item-loc{ font-size:11.5px; color:var(--text-3); margin-top:4px; }
+
+  /* ===== 收纳空间（柜体） ===== */
+  .studio{ display:grid; grid-template-columns:340px 1fr; gap:18px; align-items:start; }
+  .ai-panel{ padding:20px; }
+  .msg{ max-width:92%; padding:11px 15px; border-radius:16px; font-size:13px; line-height:1.65; margin-bottom:12px; }
+  .msg.user{
+    margin-left:auto; color:#fff; border-bottom-right-radius:6px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+  }
+  .msg.ai{ background:var(--glass); border:1px solid var(--stroke); border-bottom-left-radius:6px; color:var(--text-2); }
+  .ai-input{ display:flex; gap:9px; margin-top:14px; }
+  .ai-input input{
+    flex:1; padding:12px 16px; border-radius:999px; border:1px solid var(--stroke);
+    background:var(--glass); color:var(--text); font-size:13px; outline:none; transition:border-color .2s;
+  }
+  .ai-input input:focus{ border-color:var(--accent); }
+  .quick{ display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .quick .chip{ cursor:pointer; transition:all .2s; }
+  .quick .chip:hover{ color:var(--text); border-color:var(--stroke-hi); transform:translateY(-1px); }
+
+  .canvas{ padding:24px; }
+  .zone-tag{ display:inline-flex; align-items:center; gap:8px; padding:8px 16px; border-radius:999px; font-size:13px; font-weight:600; margin-bottom:16px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#fff; }
+  .floor{ margin-bottom:18px; }
+  .floor-name{ font-size:12px; color:var(--text-3); margin-bottom:9px; letter-spacing:1px; }
+  .cabs{ display:flex; gap:12px; }
+  .cab{
+    border-radius:16px; border:1px solid var(--stroke); background:var(--glass);
+    padding:11px; flex:1; transition:all .22s; cursor:pointer; position:relative; overflow:hidden;
+  }
+  .cab:hover{ transform:translateY(-4px); border-color:var(--stroke-hi); box-shadow:var(--shadow-sm); }
+  .cab.double::before, .cab.single::before{
+    content:""; position:absolute; top:10px; bottom:10px; width:1px; background:var(--stroke-hi); opacity:.6;
+  }
+  .cab.double::before{ left:50%; }
+  .cab.single::before{ right:14px; }
+  .cab-name{ font-size:11.5px; color:var(--text-2); display:flex; justify-content:space-between; margin-bottom:9px; position:relative; }
+  .cab-name .pct{ color:var(--text-3); }
+  .boxes{ display:flex; flex-wrap:wrap; gap:6px; position:relative; }
+  .box{
+    padding:6px 10px; border-radius:9px; font-size:11px; display:flex; align-items:center; gap:5px;
+    background:var(--glass-strong); border:1px solid var(--stroke); transition:all .2s;
+  }
+  .box:hover{ transform:scale(1.06); }
+  .box.empty{ opacity:.38; border-style:dashed; }
+  .cab-bar{ height:5px; border-radius:99px; background:var(--glass); margin-top:10px; overflow:hidden; border:1px solid var(--stroke); }
+  .cab-bar i{ display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,var(--accent),var(--accent-2)); }
+
+  /* ===== 识别入库 ===== */
+  .scan{ display:grid; grid-template-columns:1fr 1.25fr; gap:18px; align-items:start; }
+  .drop{
+    height:250px; border-radius:20px; border:1.5px dashed var(--stroke-hi);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;
+    color:var(--text-2); font-size:13.5px; cursor:pointer; transition:all .25s; background:var(--glass);
+  }
+  .drop:hover{ border-color:var(--accent); background:var(--glass-strong); transform:translateY(-3px); }
+  .drop .cam{
+    width:64px; height:64px; border-radius:22px; font-size:27px; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2)); box-shadow:0 12px 28px rgba(106,141,255,.45);
+  }
+  .seg{ display:inline-flex; padding:4px; gap:4px; border-radius:999px; background:var(--glass); border:1px solid var(--stroke); margin-top:14px; }
+  .seg button{
+    border:none; padding:8px 18px; border-radius:999px; background:none; color:var(--text-2);
+    font-size:12.5px; cursor:pointer; transition:all .2s;
+  }
+  .seg button.on{ background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#fff; }
+
+  .recog{ padding:22px; }
+  .recog-top{ display:flex; gap:18px; }
+  .recog-img{
+    width:158px; height:158px; border-radius:18px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    font-size:56px; background:linear-gradient(135deg,rgba(106,141,255,.4),rgba(45,212,191,.3)); border:1px solid var(--stroke);
+  }
+  .recog-info{ flex:1; }
+  .recog-name{ font-size:19px; font-weight:700; margin:4px 0 8px; }
+  .row{ display:flex; align-items:center; gap:9px; margin-bottom:9px; font-size:13px; color:var(--text-2); flex-wrap:wrap; }
+  .row b{ color:var(--text); font-weight:600; }
+  .conf{ font-size:11.5px; padding:4px 11px; border-radius:99px; color:#052e21; background:linear-gradient(135deg,#6ee7b7,#34d399); font-weight:650; }
+  .qty{ display:inline-flex; align-items:center; gap:0; border-radius:999px; border:1px solid var(--stroke); overflow:hidden; }
+  .qty button{ width:32px; height:32px; border:none; background:var(--glass); color:var(--text); font-size:15px; cursor:pointer; }
+  .qty span{ width:38px; text-align:center; font-size:13.5px; font-weight:650; }
+  .img-pick{ display:flex; gap:9px; }
+  .img-pick .ph{
+    width:52px; height:52px; border-radius:13px; display:flex; align-items:center; justify-content:center; font-size:21px;
+    background:var(--glass); border:1px solid var(--stroke); cursor:pointer; transition:all .2s;
+  }
+  .img-pick .ph:hover{ transform:translateY(-2px); }
+  .img-pick .ph.on{ border:2px solid var(--accent); box-shadow:0 0 0 3px rgba(106,141,255,.25); }
+  .suggest{
+    margin-top:16px; padding:16px 18px; border-radius:16px;
+    background:linear-gradient(135deg,rgba(106,141,255,.14),rgba(160,107,255,.10));
+    border:1px solid var(--stroke);
+  }
+  .crumb{ display:flex; align-items:center; gap:7px; font-size:13px; font-weight:600; flex-wrap:wrap; }
+  .crumb i{ font-style:normal; color:var(--text-3); font-size:11px; }
+  .crumb .seg2{ padding:6px 13px; border-radius:9px; background:var(--glass-strong); border:1px solid var(--stroke); }
+  .why{ font-size:12px; color:var(--text-2); margin-top:9px; line-height:1.6; }
+  .actions{ display:flex; gap:11px; margin-top:18px; }
+
+  /* ===== 搜索 ===== */
+  .big-search{
+    display:flex; align-items:center; gap:13px; padding:17px 24px; border-radius:22px; margin-bottom:18px;
+  }
+  .big-search input{ flex:1; background:none; border:none; outline:none; color:var(--text); font-size:16px; }
+  .ai-hint{
+    display:flex; gap:10px; align-items:flex-start; padding:14px 18px; border-radius:16px; margin-bottom:16px;
+    background:linear-gradient(135deg,rgba(45,212,191,.12),rgba(56,189,248,.10)); border:1px solid var(--stroke);
+    font-size:13px; color:var(--text-2); line-height:1.6;
+  }
+  .result{ display:flex; align-items:center; gap:16px; padding:15px 18px; margin-bottom:12px; }
+  .result .thumb{
+    width:64px; height:64px; border-radius:15px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:27px;
+  }
+  .result .r-name{ font-size:14.5px; font-weight:650; }
+  .result .r-loc{ font-size:12px; color:var(--text-3); margin-top:4px; }
+  .result .r-right{ margin-left:auto; text-align:right; }
+  .result .r-qty{ font-size:13px; font-weight:650; }
+  .result .r-score{ font-size:11px; color:var(--text-3); margin-top:4px; }
+
+  .footer-note{ text-align:center; color:var(--text-3); font-size:12px; margin:34px 0 8px; }
+
+  @media (max-width:1100px){
+    .stats,.recent-grid{ grid-template-columns:repeat(2,1fr); }
+    .zones,.studio,.scan{ grid-template-columns:1fr; }
+    .sidebar{ left:10px; }
+    .topbar,.main{ margin-left:104px; }
+  }
+</style>
+</head>
+<body>
+<div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+
+<!-- 左侧导航 -->
+<nav class="sidebar glass">
+  <button class="nav-btn active" data-s="s1">🏠<span class="tip">总览</span></button>
+  <button class="nav-btn" data-s="s2">🗄️<span class="tip">收纳空间</span></button>
+  <button class="nav-btn" data-s="s3">📸<span class="tip">识别入库</span></button>
+  <button class="nav-btn" data-s="s4">🔍<span class="tip">搜索</span></button>
+  <button class="nav-btn">📊<span class="tip">统计（P1）</span></button>
+  <button class="nav-btn">⚙️<span class="tip">设置</span></button>
+</nav>
+
+<!-- 顶部栏 -->
+<header class="topbar glass">
+  <div class="brand"><div class="logo">🧊</div>TidyLab · 实验室收纳</div>
+  <div class="search glass">🔎<input placeholder="搜索物品，试试「那个蓝色的测电压的东西」…"></div>
+  <div class="spacer"></div>
+  <div class="icon-pill glass" id="themeBtn" title="切换浅色 / 深色">🌙</div>
+  <div class="icon-pill glass">🔔</div>
+</header>
+
+<main class="main">
+
+  <!-- ===== ① 总览 ===== -->
+  <section class="screen active" id="s1">
+    <div class="page-title">下午好 👋</div>
+    <div class="page-sub">实验室一切井然有序，今天已入库 5 件物品</div>
+
+    <div class="stats">
+      <div class="stat glass lift"><div class="ic" style="background:rgba(106,141,255,.22)">📦</div><div class="num">128</div><div class="lbl">物品总数</div></div>
+      <div class="stat glass lift"><div class="ic" style="background:rgba(45,212,191,.22)">🗺️</div><div class="num">3</div><div class="lbl">区域</div></div>
+      <div class="stat glass lift"><div class="ic" style="background:rgba(255,107,157,.22)">🗄️</div><div class="num">12</div><div class="lbl">柜子</div></div>
+      <div class="stat glass lift"><div class="ic" style="background:rgba(251,191,36,.22)">📥</div><div class="num">5</div><div class="lbl">今日入库</div></div>
+    </div>
+
+    <h3 class="sec">空间总览<span class="more">查看全部 ›</span></h3>
+    <div class="zones">
+      <div class="zone glass lift card">
+        <div class="zone-head"><span class="zone-tag" style="margin:0">区域一</span><span class="zone-name">实验台 A 区</span><span class="zone-meta">4 柜 · 68% 已用</span></div>
+        <div class="mini-cabs">
+          <div class="mini-cab"><div class="mc-name"><span>1号柜</span><span>双开</span></div><div class="mc-cells"><i class="mc-cell full"></i><i class="mc-cell full"></i><i class="mc-cell part"></i><i class="mc-cell"></i></div></div>
+          <div class="mini-cab"><div class="mc-name"><span>2号柜</span><span>单开</span></div><div class="mc-cells"><i class="mc-cell full"></i><i class="mc-cell"></i><i class="mc-cell"></i><i class="mc-cell"></i></div></div>
+          <div class="mini-cab"><div class="mc-name"><span>3号柜</span><span>单开</span></div><div class="mc-cells"><i class="mc-cell part"></i><i class="mc-cell part"></i><i class="mc-cell"></i><i class="mc-cell"></i></div></div>
+          <div class="mini-cab"><div class="mc-name"><span>4号柜</span><span>双开</span></div><div class="mc-cells"><i class="mc-cell full"></i><i class="mc-cell full"></i><i class="mc-cell full"></i><i class="mc-cell part"></i></div></div>
+        </div>
+      </div>
+      <div class="zone glass lift card">
+        <div class="zone-head"><span class="zone-tag" style="margin:0">区域二</span><span class="zone-name">元件储物柜</span><span class="zone-meta">3 柜 · 42% 已用</span></div>
+        <div class="mini-cabs">
+          <div class="mini-cab"><div class="mc-name"><span>5号柜</span><span>双开</span></div><div class="mc-cells"><i class="mc-cell full"></i><i class="mc-cell part"></i><i class="mc-cell"></i><i class="mc-cell"></i></div></div>
+          <div class="mini-cab"><div class="mc-name"><span>6号柜</span><span>单开</span></div><div class="mc-cells"><i class="mc-cell part"></i><i class="mc-cell"></i><i class="mc-cell"></i><i class="mc-cell"></i></div></div>
+          <div class="mini-cab"><div class="mc-name"><span>7号柜</span><span>单开</span></div><div class="mc-cells"><i class="mc-cell full"></i><i class="mc-cell full"></i><i class="mc-cell part"></i><i class="mc-cell part"></i></div></div>
+          <div class="mini-cab" style="display:flex;align-items:center;justify-content:center;color:var(--text-3);font-size:12px;">＋ 新建柜子</div>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="sec">最近入库<span class="more">全部记录 ›</span></h3>
+    <div class="recent-grid">
+      <div class="item-card glass lift"><div class="item-thumb t1">🔬</div><div class="item-name">STM32F103 最小系统板</div><div class="item-loc">区域一 · 1号柜 · 第2层</div></div>
+      <div class="item-card glass lift"><div class="item-thumb t2">🧲</div><div class="item-name">杜邦线（公对母）</div><div class="item-loc">区域二 · 6号柜 · 抽屉1</div></div>
+      <div class="item-card glass lift"><div class="item-thumb t3">🪛</div><div class="item-name">精密螺丝刀套装</div><div class="item-loc">区域一 · 4号柜 · 第1层</div></div>
+      <div class="item-card glass lift"><div class="item-thumb t4">⚡</div><div class="item-name">面包板 400 孔</div><div class="item-loc">区域二 · 5号柜 · 第1层</div></div>
+    </div>
+  </section>
+
+  <!-- ===== ② 收纳空间 ===== -->
+  <section class="screen" id="s2">
+    <div class="page-title">收纳空间</div>
+    <div class="page-sub">左侧对话生成，右侧 2D 可视化编辑 · 点击格位可查看 / 放入物品</div>
+
+    <div class="studio">
+      <div class="ai-panel glass">
+        <h3 class="sec">✨ AI 对话生成</h3>
+        <div class="msg user">两层。第一层 5 个柜子：1 个双开门 + 4 个单开门。第二层 3 个柜子，都是双开门。</div>
+        <div class="msg ai">✅ 已生成「区域一」：两层，共 8 个柜子。每个柜子默认 1 层格位，可点击右侧柜子添加抽屉或收纳箱，也可以让我调整。</div>
+        <div class="quick">
+          <span class="chip">给 1 号柜加 3 个抽屉</span>
+          <span class="chip">第二层改成 4 个柜子</span>
+          <span class="chip">存为模板</span>
+        </div>
+        <div class="ai-input"><input placeholder="描述你想要的收纳结构…"><button class="btn-main" style="padding:11px 20px">生成</button></div>
+      </div>
+
+      <div class="canvas glass">
+        <span class="zone-tag">区域一 · 实验台 A 区</span>
+
+        <div class="floor">
+          <div class="floor-name">第 一 层</div>
+          <div class="cabs">
+            <div class="cab double"><div class="cab-name"><span>1号柜 双开</span><span class="pct">75%</span></div>
+              <div class="boxes"><span class="box">🔬 零件盒A</span><span class="box">⚡ 零件盒B</span><span class="box empty">＋空格</span></div>
+              <div class="cab-bar"><i style="width:75%"></i></div></div>
+            <div class="cab single"><div class="cab-name"><span>2号柜 单开</span><span class="pct">25%</span></div>
+              <div class="boxes"><span class="box">🧵 线材盒</span><span class="box empty">＋空格</span></div>
+              <div class="cab-bar"><i style="width:25%"></i></div></div>
+            <div class="cab single"><div class="cab-name"><span>3号柜 单开</span><span class="pct">50%</span></div>
+              <div class="boxes"><span class="box">🔧 工具盒</span><span class="box empty">＋空格</span></div>
+              <div class="cab-bar"><i style="width:50%"></i></div></div>
+            <div class="cab single"><div class="cab-name"><span>4号柜 单开</span><span class="pct">0%</span></div>
+              <div class="boxes"><span class="box empty">空 · 点击放入</span></div>
+              <div class="cab-bar"><i style="width:0%"></i></div></div>
+            <div class="cab single"><div class="cab-name"><span>5号柜 单开</span><span class="pct">0%</span></div>
+              <div class="boxes"><span class="box empty">空 · 点击放入</span></div>
+              <div class="cab-bar"><i style="width:0%"></i></div></div>
+          </div>
+        </div>
+
+        <div class="floor">
+          <div class="floor-name">第 二 层</div>
+          <div class="cabs">
+            <div class="cab double"><div class="cab-name"><span>6号柜 双开</span><span class="pct">60%</span></div>
+              <div class="boxes"><span class="box">📟 仪表盒</span><span class="box empty">＋空格</span></div>
+              <div class="cab-bar"><i style="width:60%"></i></div></div>
+            <div class="cab double"><div class="cab-name"><span>7号柜 双开</span><span class="pct">30%</span></div>
+              <div class="boxes"><span class="box">🧪 耗材盒</span><span class="box empty">＋空格</span></div>
+              <div class="cab-bar"><i style="width:30%"></i></div></div>
+            <div class="cab double"><div class="cab-name"><span>8号柜 双开</span><span class="pct">0%</span></div>
+              <div class="boxes"><span class="box empty">空 · 点击放入</span></div>
+              <div class="cab-bar"><i style="width:0%"></i></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== ③ 识别入库 ===== -->
+  <section class="screen" id="s3">
+    <div class="page-title">识别入库</div>
+    <div class="page-sub">拍照 → 云端 AI 识别 → 智能分区建议 → 确认入库</div>
+
+    <div class="scan">
+      <div>
+        <div class="drop"><div class="cam">📷</div>点击拍照 / 选择图片 / 拖拽到此处<br><span style="font-size:11.5px;color:var(--text-3)">手机与电脑连同一 WiFi，手机浏览器也可直接上传</span></div>
+        <div class="seg"><button>一图一物</button><button class="on">整层批量识别</button></div>
+        <div class="glass card" style="margin-top:16px">
+          <h3 class="sec">🕘 待确认队列（3）</h3>
+          <div class="row"><span class="chip on">STM32 最小系统板</span><span class="chip">杜邦线</span><span class="chip">面包板</span></div>
+        </div>
+      </div>
+
+      <div class="recog glass">
+        <div class="recog-top">
+          <div class="recog-img">🔬</div>
+          <div class="recog-info">
+            <div class="row"><span class="conf">置信度 96%</span><span class="chip">联网已匹配实物图</span></div>
+            <div class="recog-name">STM32F103C8T6 最小系统板</div>
+            <div class="row">候选名称：<span class="chip on">STM32F103C8T6 最小系统板</span><span class="chip">Blue Pill 开发板</span><span class="chip">ARM Cortex-M3 板</span></div>
+            <div class="row">类别：<b>开发板 / 模块</b>　尺寸估算：<b>约 5.3 × 2.1 cm（小件）</b></div>
+            <div class="row">数量：
+              <span class="qty"><button>−</button><span>3</span><button>＋</button></span>
+            </div>
+            <div class="row">实物配图（点选）：
+              <span class="img-pick"><span class="ph on">🔬</span><span class="ph">🖼️</span><span class="ph">📷</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="suggest">
+          <div class="crumb">💡 建议放入 <span class="seg2">区域一</span><i>›</i><span class="seg2">1号柜</span><i>›</i><span class="seg2">第 2 层</span><i>›</i><span class="seg2">防静电零件盒 A</span></div>
+          <div class="why">理由：类别「开发板/模块」在该柜已有同类的存放记录；物品为小件，防静电零件盒格位剩余 2 格，尺寸适配。</div>
+        </div>
+
+        <div class="actions">
+          <button class="btn-main">✔ 确认入库</button>
+          <button class="btn-ghost">改选其他位置</button>
+          <button class="btn-ghost">编辑识别结果</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== ④ 搜索 ===== -->
+  <section class="screen" id="s4">
+    <div class="page-title">搜索</div>
+    <div class="page-sub">精确匹配 + AI 语义推测 · 支持按类别 / 区域 / 数量 / 时间筛选</div>
+
+    <div class="big-search glass">🔎<input value="那个蓝色的、测电压的东西"><button class="btn-main" style="padding:10px 24px">搜索</button></div>
+
+    <div class="ai-hint">✨ <span>AI 语义理解：你可能在找 —— <b style="color:var(--text)">万用表</b>（数字万用表 / 多用电表）。以下按匹配度排序，共 3 件相关物品。</span></div>
+
+    <div class="result glass lift">
+      <div class="thumb t2">🔋</div>
+      <div><div class="r-name">数字万用表（黄色外壳）</div><div class="r-loc">区域一 › 4号柜 › 第 1 层 › 工具盒</div></div>
+      <div class="r-right"><div class="r-qty">数量 2</div><div class="r-score">匹配 94%</div></div>
+    </div>
+    <div class="result glass lift">
+      <div class="thumb t1">📏</div>
+      <div><div class="r-name">迷你电压检测笔</div><div class="r-loc">区域二 › 5号柜 › 第 2 层 › 仪表盒</div></div>
+      <div class="r-right"><div class="r-qty">数量 1</div><div class="r-score">匹配 81%</div></div>
+    </div>
+    <div class="result glass lift">
+      <div class="thumb t3">🔌</div>
+      <div><div class="r-name">示波器探头（蓝色）</div><div class="r-loc">区域二 › 6号柜 › 抽屉 1 › 配件盒</div></div>
+      <div class="r-right"><div class="r-qty">数量 4</div><div class="r-score">匹配 62%</div></div>
+    </div>
+
+    <div class="actions" style="margin-top:16px">
+      <span class="chip">筛选：全部类别 ▾</span><span class="chip">全部区域 ▾</span><span class="chip">有库存 ▾</span>
+    </div>
+  </section>
+
+  <div class="footer-note">TidyLab · 界面设计效果图 v1（数据均为示例） · 玻璃拟态 / Apple 风 · 右上角 🌙 可切换深浅主题</div>
+</main>
+
+<script>
+  // 导航切换
+  document.querySelectorAll('.nav-btn[data-s]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+      document.getElementById(btn.dataset.s).classList.add('active');
+      window.scrollTo({top:0,behavior:'smooth'});
+    });
+  });
+  // 主题切换
+  const themeBtn=document.getElementById('themeBtn');
+  themeBtn.addEventListener('click',()=>{
+    document.body.classList.toggle('light');
+    themeBtn.textContent=document.body.classList.contains('light')?'☀️':'🌙';
+  });
+  // 小交互：识别模式切换
+  document.querySelectorAll('.seg').forEach(seg=>{
+    seg.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+      seg.querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+    }));
+  });
+</script>
+</body>
+</html>

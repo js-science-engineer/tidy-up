@@ -1,0 +1,374 @@
+/* ==========================================================================
+   电子宠物（TidyLab）—— 由 pet-demo-v3.html 移植而来
+   --------------------------------------------------------------------------
+   作用域约定：所有选择器均以 .pet- / .pm- / .lm- / .bubble / .face / .zzz /
+   .pose-flat / .ghost-bar / .look-modal 开头，与 tidy-up 现有样式零冲突
+   （已全量比对确认）。字体、圆角语言、玻璃质感与主站保持一致。
+   z-index 遵循主站层级：main 10 / topbar 40 / sidebar 50 / 宠物 54~55 /
+   tooltip 60 / modal-mask 90 / toast 99。宠物层 pointer-events:none，
+   只有宠物本体接收点击，不影响页面其它区域。
+   深/浅主题复用主站的 body.light，无需额外开关。
+   ========================================================================== */
+
+/* 宠物专属语义色（不与主站任何变量重名，故放在 :root）
+   --pet-panel  弹层实底（菜单/面板/气泡）
+   --pet-soft   弹层内浅色块（卡片/槽位/输入框）
+   --pet-soft-2 更亮一档的浅色块
+   --pet-rim    弹层内描边 */
+:root{
+  --pet-panel: rgba(19,27,46,.94);
+  --pet-soft: rgba(255,255,255,.06);
+  --pet-soft-2: rgba(255,255,255,.11);
+  --pet-rim: rgba(255,255,255,.14);
+}
+body.light{
+  --pet-panel: rgba(255,255,255,.97);
+  --pet-soft: rgba(19,27,46,.045);
+  --pet-soft-2: rgba(19,27,46,.075);
+  --pet-rim: rgba(19,27,46,.13);
+}
+
+/* =================== 舞台与宠物本体（多实例 · rAF 连续 3D 转身） =================== */
+.pet-layer{ position:fixed; inset:0; z-index:55; pointer-events:none; }
+.pet-stage{
+  position:absolute; z-index:1;
+  width:var(--pet-size, 150px); height:calc(var(--pet-size, 150px) * 1.25);
+  pointer-events:auto; cursor:grab; user-select:none; touch-action:none;
+  transform-origin:50% 88%;
+  transition: opacity .25s ease;
+}
+.pet-stage.pressing{ cursor:grabbing; }
+.pet-stage.dragging{
+  cursor:grabbing; z-index:60;
+  transform: scale(1.06) rotate(var(--drag-tilt, 0deg));
+}
+.pet-stage.dragging .pet-shadow{ animation:none; opacity:.5; transform:translateX(-50%) scale(.8) translateY(5px); }
+.pet-stage.dragging .pet-glow{ opacity:.95; transform:translateX(-50%) scale(1.18); }
+.pet-stage.settle{ animation: petSettle .42s cubic-bezier(.3,1.55,.5,1); }
+@keyframes petSettle{
+  0%  { transform:scale(1.06) rotate(var(--drag-tilt,0deg)); }
+  55% { transform:scale(.975) rotate(calc(var(--drag-tilt,0deg) * -.3)); }
+  100%{ transform:none; }
+}
+.pet-stage.ghost{ opacity:0 !important; pointer-events:none !important; }
+.pet-stage.spawn{ animation: petSpawn .42s cubic-bezier(.34,1.56,.64,1); }
+@keyframes petSpawn{ from{ opacity:0; transform:scale(.35); } to{ opacity:1; transform:scale(1); } }
+.pet-stage img{ -webkit-user-drag:none; user-drag:none; pointer-events:none; }
+
+/* 透视舞台：呼吸放本层，让 .pet-cyl 基础 transform 恒为 none → 动作切换可平滑过渡 */
+.pet-3d{
+  position:absolute; inset:0; perspective:1100px;
+  animation: idleBob 3.2s ease-in-out infinite alternate;
+  transition: opacity .22s ease;
+}
+@keyframes idleBob{ from{ transform:scale(1,1) translateY(0);} to{ transform:scale(1.012,1.02) translateY(-2px);} }
+.pet-cyl{
+  position:absolute; inset:0; transform-style: preserve-3d;
+  transition: transform .24s ease-out;
+  will-change: transform;
+}
+.face{
+  position:absolute; inset:0; width:100%; height:100%;
+  opacity:0; transform-style: preserve-3d;
+  will-change: transform, opacity; backface-visibility: hidden;
+}
+.face.cur{ opacity:1; }
+
+/* 挥手 / 睡觉：整图姿势，与 3D 层交叉淡化（不再硬切 display） */
+.pose-flat{
+  display:block; position:absolute; inset:0; width:100%; height:100%; object-fit:contain;
+  opacity:0; pointer-events:none; transition: opacity .22s ease;
+}
+.acting-wave .pet-3d, .acting-sleep .pet-3d{ opacity:0; animation-play-state:paused; }
+.acting-wave .pose-wave, .acting-sleep .pose-sleep{ opacity:1; }
+
+/* 落地双层阴影 + 接地暖光（拖动"离地"时影缩淡、光变亮） */
+.pet-shadow{
+  position:absolute; left:50%; bottom:-8px; width:70%; height:16px;
+  background:radial-gradient(ellipse at center, rgba(0,0,0,.42) 0%, rgba(0,0,0,.20) 45%, rgba(0,0,0,0) 74%);
+  transform:translateX(-50%); z-index:-1;
+  transition: opacity .2s ease, transform .2s ease;
+  animation: shadowPulse 3.2s ease-in-out infinite alternate;
+}
+.pet-shadow::after{
+  content:''; position:absolute; left:50%; top:50%; width:175%; height:230%;
+  transform:translate(-50%,-50%);
+  background:radial-gradient(ellipse at center, rgba(0,0,0,.15), rgba(0,0,0,0) 70%);
+}
+@keyframes shadowPulse{ from{ opacity:1; } to{ opacity:.84; } }
+.pet-glow{
+  position:absolute; left:50%; bottom:-6px; width:88%; height:15px;
+  transform:translateX(-50%); z-index:-1;
+  background:radial-gradient(ellipse at center, rgba(255,206,116,.34), rgba(255,206,116,0) 72%);
+  opacity:.72; transition: opacity .2s ease, transform .2s ease;
+}
+
+/* 张望：真 3D 转头 */
+.acting-look .pet-cyl{ animation: look3d 2.2s ease-in-out; }
+@keyframes look3d{ 0%{ transform:rotateY(0);} 25%{ transform:rotateY(-30deg) translateX(-4px);} 50%{ transform:rotateY(30deg) translateX(4px);} 75%{ transform:rotateY(-10deg);} 100%{ transform:rotateY(0);} }
+
+/* 摇摆舞 */
+.acting-dance .pet-cyl{ animation: dance3d .58s ease-in-out 9 alternate; }
+@keyframes dance3d{ from{ transform:rotateY(-26deg) rotateZ(-6deg) translateY(0);} to{ transform:rotateY(26deg) rotateZ(6deg) translateY(-8px);} }
+
+/* 扭一扭 */
+.acting-wiggle .pet-cyl{ animation: wiggle3d .36s ease-in-out 9 alternate; }
+@keyframes wiggle3d{ from{ transform:rotateY(-34deg) translateX(-3px);} to{ transform:rotateY(34deg) translateX(3px);} }
+
+/* 惊讶 */
+.acting-surprise .pet-cyl{ animation: surprise3d 1.2s ease-in-out; }
+@keyframes surprise3d{ 0%{ transform:scale(1) rotateY(0);} 20%{ transform:scale(1.12) rotateY(-16deg) translateY(-8px);} 60%{ transform:scale(1.08) rotateY(-14deg) translateY(-6px);} 100%{ transform:scale(1) rotateY(0);} }
+
+/* 打招呼 / 打盹（姿势图动画） */
+.acting-wave .pose-wave{ animation: waveRock .5s ease-in-out 8 alternate; }
+@keyframes waveRock{ from{ transform:rotate(-4deg);} to{ transform:rotate(4deg) translateY(-2px);} }
+
+.acting-excited .pet-cyl{ animation: excBounce .4s ease-in-out 8 alternate; }
+@keyframes excBounce{ from{ transform:translateY(0) scale(1.03,.96) rotateZ(-5deg);} to{ transform:translateY(-16px) scale(.97,1.05) rotateZ(5deg);} }
+
+.acting-jump .pet-cyl{ animation: jumpUp 1.05s cubic-bezier(.3,0,.4,1); }
+@keyframes jumpUp{
+  0%{ transform:translateY(0) scale(1,1); }
+  18%{ transform:translateY(7px) scale(1.09,.89); }
+  45%{ transform:translateY(-44px) scale(.93,1.12); }
+  70%{ transform:translateY(0) scale(1.08,.9); }
+  86%{ transform:translateY(-8px) scale(.99,1.02); }
+  100%{ transform:translateY(0) scale(1,1); }
+}
+.acting-jump .pet-shadow{ animation: shadowJump 1.05s cubic-bezier(.3,0,.4,1); }
+@keyframes shadowJump{ 0%,100%{ transform:translateX(-50%) scale(1); opacity:1;} 45%{ transform:translateX(-50%) scale(.62); opacity:.5;} }
+
+.acting-walk .pet-cyl{ animation: walkRock 2s ease-in-out; }
+@keyframes walkRock{ 0%,100%{ transform:translateX(0) rotateZ(0);} 25%{ transform:translateX(18px) rotateZ(5deg) rotateY(14deg);} 50%{ transform:translateX(0) rotateZ(0);} 75%{ transform:translateX(-18px) rotateZ(-5deg) rotateY(-14deg);} }
+
+.acting-nod .pet-cyl{ animation: nodIt .55s ease-in-out 4; }
+@keyframes nodIt{ 0%,100%{ transform:scale(1,1);} 40%{ transform:scale(1.05,.93) translateY(5px);} }
+
+.acting-sleep .pose-sleep{ animation: sleepSway 3.6s ease-in-out infinite alternate; }
+@keyframes sleepSway{ from{ transform:rotate(-2.5deg);} to{ transform:rotate(2.5deg);} }
+
+/* Zzz */
+.zzz{ position:absolute; right:-6px; top:-4px; opacity:0; pointer-events:none; transition:opacity .3s; }
+.acting-sleep .zzz{ opacity:1; }
+.zzz span{
+  position:absolute; right:0; top:0; color:#9fb7ff; font:bold 18px "Comic Sans MS",system-ui;
+  animation: zfloat 2.1s ease-in-out infinite;
+}
+.zzz span:nth-child(2){ font-size:14px; animation-delay:.6s; right:12px; top:-2px; }
+.zzz span:nth-child(3){ font-size:11px; animation-delay:1.2s; right:22px; top:2px; }
+@keyframes zfloat{ 0%{ transform:translate(0,8px); opacity:0;} 30%{ opacity:.95;} 100%{ transform:translate(10px,-20px); opacity:0;} }
+
+/* 气泡（平时 visibility:hidden，避免 backdrop-filter 常驻拖累帧率） */
+.bubble{
+  position:absolute; right:4px; bottom:calc(100% + 14px);
+  background:var(--pet-panel); border:1px solid var(--pet-rim); backdrop-filter: blur(14px);
+  color:var(--text); font-size:12.5px; padding:8px 13px; border-radius:14px 14px 4px 14px;
+  white-space:nowrap; opacity:0; visibility:hidden; transform:translateY(6px) scale(.92);
+  transition: opacity .25s, transform .25s, visibility 0s linear .25s;
+  pointer-events:none; z-index:3;
+}
+.bubble.show{
+  opacity:1; visibility:visible; transform:translateY(0) scale(1);
+  transition: opacity .25s, transform .25s, visibility 0s;
+}
+
+/* =================== 右键菜单 =================== */
+.pet-menu{
+  position:fixed; z-index:88; width:252px; padding:10px;
+  background:var(--pet-panel); border:1px solid var(--pet-rim); border-radius:16px;
+  backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow: 0 20px 54px rgba(0,0,0,.34), 0 2px 8px rgba(0,0,0,.18);
+  font-size:13px; color:var(--text);
+  animation: petMenuIn .14s ease-out;
+}
+.pet-menu[hidden]{ display:none; }
+@keyframes petMenuIn{ from{ opacity:0; transform:translateY(-4px) scale(.97);} to{ opacity:1; transform:none;} }
+.pm-head{ display:flex; justify-content:space-between; align-items:center; padding:3px 6px 9px; }
+.pm-title{ font-weight:600; font-size:13.5px; }
+.pm-state{
+  font-size:11.5px; padding:3px 9px; border-radius:999px;
+  background:rgba(91,155,252,.16); color:var(--a1); border:1px solid rgba(91,155,252,.34);
+}
+.pm-sep{ height:1px; background:var(--pet-rim); margin:8px 2px; }
+.pm-label{ font-size:11.5px; color:var(--text-2); padding:0 6px 6px; display:flex; justify-content:space-between; gap:8px; }
+.pm-grid{ display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.pm-item{
+  display:flex; align-items:center; gap:6px; padding:7px 9px; border-radius:10px;
+  border:1px solid transparent; background:transparent; color:var(--text);
+  cursor:pointer; font-size:12.5px; text-align:left; font-family:inherit; transition:all .13s;
+}
+.pm-item:hover{ background:rgba(91,155,252,.13); }
+.pm-item.on{ border-color:var(--a1); background:rgba(91,155,252,.2); }
+.pm-item em{ font-style:normal; font-size:13px; }
+.pm-range{ width:100%; margin:2px 0 8px; display:block; }
+.pm-btn{
+  width:100%; text-align:left; padding:8px 10px; border-radius:10px; margin-top:5px;
+  border:1px solid var(--pet-rim); background:transparent; color:var(--text);
+  cursor:pointer; font-size:12.5px; font-family:inherit; transition:all .13s;
+}
+.pm-btn:hover:not(:disabled){ border-color:var(--a1); background:rgba(91,155,252,.1); }
+.pm-btn.danger:hover:not(:disabled){ border-color:#e2566a; color:#e2566a; background:rgba(226,86,106,.1); }
+.pm-btn:disabled, .pm-btn.protected{ opacity:.45; }
+.pm-btn.protected{ cursor:not-allowed; }
+.pm-btn.arm{ border-color:#e2566a; color:#e2566a; background:rgba(226,86,106,.1); }
+
+/* 隐藏宠物的恢复浮标（放右下角，避开居中的 toast / 拖拽提示） */
+.ghost-bar{
+  position:fixed; right:20px; bottom:18px; z-index:54;
+  padding:9px 18px; border-radius:999px; border:1px solid var(--pet-rim);
+  background:var(--pet-panel); color:var(--text); font-size:12.5px; cursor:pointer;
+  box-shadow:0 8px 26px rgba(0,0,0,.28); backdrop-filter: blur(14px);
+  font-family:inherit;
+  animation: petMenuIn .2s ease-out;
+}
+.ghost-bar:hover{ border-color:var(--a1); }
+.ghost-bar[hidden]{ display:none; }
+
+/* 自定义形象：用正视图合成的招手 / 打盹姿势（与内置姿势图作出区分） */
+.custom-look.acting-wave .pose-wave{ animation: waveRockCustom .5s ease-in-out 8 alternate; transform-origin:50% 94%; }
+@keyframes waveRockCustom{ from{ transform:rotate(-5deg) translateY(0);} to{ transform:rotate(4deg) translateY(-5px);} }
+.custom-look.acting-sleep .pose-sleep{ animation: sleepSwayCustom 3.6s ease-in-out infinite alternate; transform-origin:50% 100%; }
+@keyframes sleepSwayCustom{ from{ transform:rotate(-8deg) scaleY(.93);} to{ transform:rotate(-2deg) scaleY(.93);} }
+
+/* =================== 自定义形象面板 =================== */
+.look-modal{ position:fixed; inset:0; z-index:95; display:flex; align-items:center; justify-content:center; padding:16px; }
+.look-modal[hidden]{ display:none; }
+.lm-backdrop{ position:absolute; inset:0; background:rgba(4,8,20,.6); backdrop-filter:blur(6px); animation:lmFade .18s ease-out; }
+body.light .lm-backdrop{ background:rgba(28,38,68,.34); }
+@keyframes lmFade{ from{ opacity:0; } to{ opacity:1; } }
+.lm-card{
+  position:relative; width:min(780px, 100%); max-height:100%; display:flex; flex-direction:column;
+  background:var(--pet-panel); border:1px solid var(--pet-rim); border-radius:20px; overflow:hidden;
+  box-shadow:0 30px 80px rgba(0,0,0,.42), 0 2px 10px rgba(0,0,0,.2); color:var(--text);
+  font-size:13px; animation:lmIn .24s cubic-bezier(.3,1.25,.5,1);
+}
+@keyframes lmIn{ from{ opacity:0; transform:translateY(14px) scale(.97);} to{ opacity:1; transform:none;} }
+.lm-head{ display:flex; align-items:center; justify-content:space-between; padding:15px 18px 12px; border-bottom:1px solid var(--pet-rim); }
+.lm-title{ font-weight:600; font-size:15px; }
+.lm-x{ border:none; background:transparent; color:var(--text-2); font-size:16px; cursor:pointer; padding:2px 6px; border-radius:8px; font-family:inherit; }
+.lm-x:hover{ color:var(--text); background:var(--pet-soft-2); }
+.lm-hint{
+  margin:0; padding:11px 18px; font-size:12px; line-height:1.85; color:var(--text-2);
+  background:rgba(91,155,252,.09); border-bottom:1px solid var(--pet-rim);
+}
+.lm-hint b{ color:var(--a1); }
+.lm-scroll{ padding:16px 18px 4px; overflow:auto; flex:1; }
+.lm-sect{ margin-bottom:18px; }
+.lm-sect-h{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:9px; }
+.lm-sect-h b{ font-size:13px; }
+.lm-sect-h.sm{ margin-top:14px; }
+.lm-note{ font-size:11.5px; color:var(--text-2); line-height:1.6; flex:1 1 100%; }
+.lm-tag{ font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--pet-rim); color:var(--text-2); }
+.lm-tag.req{ color:#ff8b9e; border-color:rgba(255,139,158,.42); background:rgba(255,139,158,.12); }
+.lm-tag.ok{ color:#5cd6a4; border-color:rgba(92,214,164,.42); background:rgba(92,214,164,.12); }
+.lm-slots{ display:grid; grid-template-columns:repeat(3, 1fr); gap:9px; }
+.lm-slot{
+  position:relative; border:1.5px dashed var(--pet-rim); border-radius:13px; padding:9px 9px 8px;
+  background:var(--pet-soft); cursor:pointer; transition:all .15s; text-align:center;
+}
+.lm-slot:hover{ border-color:var(--a1); background:rgba(91,155,252,.08); }
+.lm-slot.filled{ border-style:solid; border-color:rgba(92,214,164,.5); }
+.lm-slot.bad{ border-color:#e2566a; }
+.lm-slot.over{ border-color:var(--a1); background:rgba(91,155,252,.16); transform:translateY(-1px); }
+.lm-thumb{
+  position:relative; width:100%; aspect-ratio:4 / 5; border-radius:9px; overflow:hidden;
+  background:repeating-conic-gradient(rgba(140,148,175,.16) 0% 25%, transparent 0% 50%) 50% / 16px 16px;
+  display:flex; align-items:center; justify-content:center; margin-bottom:7px;
+}
+.lm-thumb img{ max-width:100%; max-height:100%; object-fit:contain; display:none; }
+.lm-slot.filled .lm-thumb img{ display:block; }
+.lm-ph{ font-size:20px; color:var(--text-2); opacity:.65; }
+.lm-slot.filled .lm-ph{ display:none; }
+.lm-del{
+  display:none; position:absolute; right:4px; top:4px; width:20px; height:20px; line-height:1;
+  border-radius:50%; border:1px solid var(--pet-rim); background:var(--pet-panel); color:var(--text-2);
+  font-size:11px; cursor:pointer; padding:0; align-items:center; justify-content:center;
+}
+.lm-slot.filled .lm-del{ display:flex; }
+.lm-del:hover{ color:#e2566a; border-color:#e2566a; }
+.lm-slot.busy{ opacity:.72; }
+.lm-slot-name{ font-size:12px; font-weight:600; }
+.lm-slot-name i{ color:#ff8b9e; font-style:normal; }
+.lm-slot-meta{ font-size:10.5px; color:var(--text-2); margin-top:3px; min-height:14px; line-height:1.5; word-break:break-all; }
+.lm-slot-meta.ok{ color:#5cd6a4; }
+.lm-field{ display:block; margin-bottom:10px; }
+.lm-field > span{ display:block; font-size:11.5px; color:var(--text-2); margin-bottom:5px; }
+.lm-field input, .lm-field textarea{
+  width:100%; font-family:inherit; font-size:12.5px; color:var(--text); background:var(--pet-soft);
+  border:1px solid var(--pet-rim); border-radius:11px; padding:9px 11px; resize:vertical; line-height:1.7;
+}
+.lm-field input:focus, .lm-field textarea:focus{ outline:none; border-color:var(--a1); background:rgba(91,155,252,.07); }
+.lm-chips{ display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 8px; }
+.lm-chip{
+  font-size:11.5px; padding:4px 10px; border-radius:999px; border:1px dashed var(--pet-rim);
+  background:transparent; color:var(--text-2); cursor:pointer; font-family:inherit;
+}
+.lm-chip:hover{ border-color:var(--a1); color:var(--a1); border-style:solid; }
+.lm-count{ font-size:11px; color:var(--text-2); text-align:right; }
+.lm-count.ok{ color:#5cd6a4; }
+.lm-check{ display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text-2); padding:5px 0; cursor:pointer; }
+.lm-more{ font-size:12px; color:var(--text-2); margin-top:6px; }
+.lm-more summary{ cursor:pointer; color:var(--a1); }
+.lm-more .lm-field{ margin-top:9px; }
+.lm-checklist{ padding:11px 18px; border-top:1px solid var(--pet-rim); display:flex; flex-direction:column; gap:5px; background:var(--pet-soft); }
+.lm-ck{ font-size:12px; display:flex; align-items:flex-start; gap:7px; line-height:1.6; }
+.lm-ck em{ font-style:normal; flex:0 0 15px; text-align:center; }
+.lm-ck.no{ color:var(--text-2); }
+.lm-ck.ok{ color:#5cd6a4; }
+.lm-ck.warn{ color:#e8b34a; }
+.lm-foot{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:12px 18px 15px; border-top:1px solid var(--pet-rim); }
+.lm-spacer{ flex:1; }
+.lm-foot .pm-btn{ width:auto; margin-top:0; padding:8px 13px; }
+.lm-foot .pm-btn.primary{ background:var(--a1); border-color:var(--a1); color:#fff; font-weight:600; }
+.lm-foot .pm-btn.primary:hover:not(:disabled){ filter:brightness(1.08); }
+.lm-foot .pm-btn.primary:disabled{ opacity:.42; cursor:not-allowed; }
+
+/* 形象图上传区（只需一张，自动分析切分视角） */
+.lm-drop{
+  position:relative; border:1.5px dashed var(--pet-rim); border-radius:14px; background:var(--pet-soft);
+  padding:16px; text-align:center; cursor:pointer; transition:all .15s;
+}
+.lm-drop:hover{ border-color:var(--a1); background:rgba(91,155,252,.08); }
+.lm-drop.over{ border-color:var(--a1); background:rgba(91,155,252,.16); transform:translateY(-1px); }
+.lm-drop.busy{ opacity:.72; pointer-events:none; }
+.lm-drop.bad{ border-color:#e2566a; }
+.lm-drop-ph .lm-drop-ico{ font-size:24px; display:block; margin-bottom:6px; }
+.lm-drop-ph b{ display:block; font-size:13px; }
+.lm-drop-ph small{ display:block; margin-top:5px; font-size:11.5px; color:var(--text-2); line-height:1.65; }
+.lm-drop-info{ font-size:12px; line-height:1.85; color:var(--text-2); text-align:left; }
+.lm-drop-info b.ok{ color:#5cd6a4; }
+.lm-drop-src{ max-height:110px; max-width:100%; object-fit:contain; margin-top:9px; border-radius:9px; display:block; margin-left:auto; margin-right:auto; }
+.lm-split{ display:grid; grid-template-columns:repeat(3, 1fr); gap:9px; margin-top:11px; }
+.lm-split[hidden]{ display:none; }
+.lm-scard{
+  position:relative; border:1.5px solid rgba(92,214,164,.5); border-radius:13px;
+  padding:9px 9px 8px; background:var(--pet-soft); text-align:center;
+}
+.lm-scard.approx{ border-color:rgba(232,179,74,.55); }
+.lm-scard .lm-thumb img{ display:block; }
+.lm-swap{
+  margin-top:7px; width:100%; font-family:inherit; font-size:11px; padding:5px 6px;
+  border-radius:9px; border:1px dashed var(--pet-rim); background:transparent; color:var(--text-2); cursor:pointer;
+}
+.lm-swap:hover{ border-color:var(--a1); color:var(--a1); border-style:solid; }
+.lm-swap[hidden]{ display:none; }
+
+/* 主站的全局 input / checkbox 样式会波及面板内的表单控件，这里显式复位为宠物自己的观感 */
+.pet-menu input[type=range], .look-modal input[type=range]{
+  -webkit-appearance:none; appearance:none; height:20px; padding:0; border:none;
+  background:transparent; box-shadow:none; accent-color:var(--a1); cursor:pointer;
+}
+.lm-check input[type=checkbox]{
+  -webkit-appearance:checkbox; appearance:auto; width:15px; height:15px; padding:0; border:none;
+  background:none; box-shadow:none; flex:none; accent-color:var(--a1);
+}
+.look-modal input[type=file]{ display:none; }
+
+/* =================== 小屏适配（主站 640px 以下是手机版：侧边栏移到底部） =================== */
+@media (max-width:640px){
+  .lm-slots, .lm-split{ grid-template-columns:1fr; }
+  .lm-card{ border-radius:16px; }
+  .lm-scroll{ padding:13px 14px 4px; }
+  .pet-menu{ width:min(252px, calc(100vw - 20px)); }
+  .ghost-bar{ right:12px; bottom:12px; font-size:12px; padding:8px 14px; }
+}

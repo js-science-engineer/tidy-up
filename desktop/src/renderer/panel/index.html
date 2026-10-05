@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src 'self' data: look:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>js-pet</title>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <div class="app">
+    <nav class="side">
+      <div class="logo">js-pet</div>
+      <button class="tab-btn active" data-tab="grow">🐾<span>养成</span></button>
+      <button class="tab-btn" data-tab="looks">🎨<span>形象</span></button>
+      <button class="tab-btn" data-tab="settings">⚙️<span>设置</span></button>
+      <div class="ver" id="ver"></div>
+    </nav>
+
+    <main>
+      <!-- 养成 -->
+      <section id="tab-grow">
+        <div class="head">
+          <div class="lv">Lv.<span id="gLevel">1</span></div>
+          <div class="mood" id="gMoodText">状态良好</div>
+        </div>
+        <div class="progress"><div class="progress-in" id="gBondBar"></div></div>
+        <div class="progress-label" id="gBondText">亲密度 0 / 30</div>
+
+        <div class="stat">
+          <div class="stat-name">🍚 饱食度</div>
+          <div class="bar"><div class="bar-in hunger" id="gHunger"></div></div>
+          <div class="stat-num" id="gHungerNum">80</div>
+        </div>
+        <div class="stat">
+          <div class="stat-name">😊 心情</div>
+          <div class="bar"><div class="bar-in mood" id="gMood"></div></div>
+          <div class="stat-num" id="gMoodNum">80</div>
+        </div>
+
+        <div class="actions">
+          <button id="btnFeed">喂食</button>
+          <button id="btnPet">抚摸</button>
+          <button id="btnPlay">玩耍</button>
+        </div>
+        <div class="tip" id="gTip"></div>
+      </section>
+
+      <!-- 形象 -->
+      <section id="tab-looks" hidden>
+        <div class="hint">选择形象，或上传一张白底/绿幕宠物图（jpg/png，自动抠图）</div>
+        <div id="lookList" class="look-list"></div>
+        <label class="upload">
+          ＋ 上传新形象
+          <input type="file" id="lookFile" accept="image/png,image/jpeg,image/webp" hidden>
+        </label>
+      </section>
+
+      <!-- 设置 -->
+      <section id="tab-settings" hidden>
+        <div class="group">
+          <div class="group-title">外观</div>
+          <div class="row">
+            <span>宠物大小</span>
+            <input type="range" id="sizeRange" min="100" max="260" step="10">
+            <span id="sizeVal">150</span>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="wanderChk"> 允许在桌面上散步</label>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group-title">系统</div>
+          <div class="row">
+            <label><input type="checkbox" id="autoStartChk"> 开机自动启动</label>
+          </div>
+          <div class="row actions">
+            <button id="btnBackup">立即备份</button>
+            <button id="btnExport">导出数据</button>
+            <button id="btnImport">恢复数据</button>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group-title">关于</div>
+          <div class="about">
+            js-pet · 桌面电子宠物<br>
+            数据只保存在你自己的电脑上，不联网、不上传。<br>
+            <span id="aboutVer"></span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="../../shared/stats.js"></script>
+  <script src="panel.js"></script>
+</body>
+</html>

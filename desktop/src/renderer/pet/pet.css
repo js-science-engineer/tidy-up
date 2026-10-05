@@ -1,0 +1,224 @@
+/* ============================================================
+ * js-pet 宠物窗口样式
+ * 整个窗口是透明的，只有宠物本体可见；除宠物本体范围外全部穿透。
+ * ============================================================ */
+
+html, body {
+  margin: 0; padding: 0;
+  width: 100%; height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  cursor: default;
+}
+body { -webkit-user-select: none; user-select: none; }
+
+.pet-layer {
+  position: fixed; inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* ---------- 宠物本体（唯一接收鼠标的区域） ---------- */
+.pet-stage {
+  position: absolute;
+  width: var(--pet-size, 150px);
+  height: calc(var(--pet-size, 150px) * 1.25);
+  left: calc(50% - var(--pet-size, 150px) / 2);
+  bottom: 14px;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  transform-origin: 50% 88%;
+}
+.pet-stage.pressing { cursor: grabbing; }
+.pet-stage.dragging {
+  cursor: grabbing;
+  transform: scale(1.05);
+}
+.pet-stage img {
+  -webkit-user-drag: none; user-drag: none;
+  pointer-events: none;
+}
+
+/* 透视舞台：呼吸放本层，让 .pet-cyl 基础 transform 恒为 none → 动作切换可平滑过渡 */
+.pet-3d {
+  position: absolute; inset: 0;
+  perspective: 1100px;
+  animation: idleBob 3.2s ease-in-out infinite alternate;
+  transition: opacity .22s ease;
+}
+@keyframes idleBob {
+  from { transform: scale(1,1) translateY(0); }
+  to   { transform: scale(1.012,1.02) translateY(-2px); }
+}
+.pet-cyl {
+  position: absolute; inset: 0;
+  transform-style: preserve-3d;
+  transition: transform .24s ease-out;
+  will-change: transform;
+}
+.face {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0;
+  transform-style: preserve-3d;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+.face.cur { opacity: 1; }
+
+/* 挥手 / 睡觉：整图姿势，与 3D 层交叉淡化 */
+.pose-flat {
+  display: block; position: absolute; inset: 0;
+  width: 100%; height: 100%; object-fit: contain;
+  opacity: 0; pointer-events: none;
+  transition: opacity .22s ease;
+}
+.acting-wave .pet-3d, .acting-sleep .pet-3d { opacity: 0; animation-play-state: paused; }
+.acting-wave .pose-wave, .acting-sleep .pose-sleep { opacity: 1; }
+
+/* 落地双层阴影 + 接地暖光 */
+.pet-shadow {
+  position: absolute; left: 50%; bottom: -8px; width: 70%; height: 16px;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,.42) 0%, rgba(0,0,0,.20) 45%, rgba(0,0,0,0) 74%);
+  transform: translateX(-50%); z-index: -1;
+  transition: opacity .2s ease, transform .2s ease;
+  animation: shadowPulse 3.2s ease-in-out infinite alternate;
+}
+.pet-shadow::after {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 175%; height: 230%;
+  transform: translate(-50%,-50%);
+  background: radial-gradient(ellipse at center, rgba(0,0,0,.15), rgba(0,0,0,0) 70%);
+}
+@keyframes shadowPulse { from { opacity: 1; } to { opacity: .84; } }
+.pet-glow {
+  position: absolute; left: 50%; bottom: -6px; width: 88%; height: 15px;
+  transform: translateX(-50%); z-index: -1;
+  background: radial-gradient(ellipse at center, rgba(255,206,116,.34), rgba(255,206,116,0) 72%);
+  opacity: .72;
+  transition: opacity .2s ease, transform .2s ease;
+}
+
+/* ---------- 动作关键帧（沿用 v3 的 11 种） ---------- */
+.acting-look .pet-cyl { animation: look3d 2.2s ease-in-out; }
+@keyframes look3d {
+  0% { transform: rotateY(0); }
+  25% { transform: rotateY(-30deg) translateX(-4px); }
+  50% { transform: rotateY(30deg) translateX(4px); }
+  75% { transform: rotateY(-10deg); }
+  100% { transform: rotateY(0); }
+}
+
+.acting-dance .pet-cyl { animation: dance3d .58s ease-in-out 9 alternate; }
+@keyframes dance3d {
+  from { transform: rotateY(-26deg) rotateZ(-6deg) translateY(0); }
+  to   { transform: rotateY(26deg) rotateZ(6deg) translateY(-8px); }
+}
+
+.acting-wiggle .pet-cyl { animation: wiggle3d .36s ease-in-out 9 alternate; }
+@keyframes wiggle3d {
+  from { transform: rotateY(-34deg) translateX(-3px); }
+  to   { transform: rotateY(34deg) translateX(3px); }
+}
+
+.acting-surprise .pet-cyl { animation: surprise3d 1.2s ease-in-out; }
+@keyframes surprise3d {
+  0% { transform: scale(1) rotateY(0); }
+  20% { transform: scale(1.12) rotateY(-16deg) translateY(-8px); }
+  60% { transform: scale(1.08) rotateY(-14deg) translateY(-6px); }
+  100% { transform: scale(1) rotateY(0); }
+}
+
+.acting-wave .pose-wave { animation: waveRock .5s ease-in-out 8 alternate; }
+@keyframes waveRock {
+  from { transform: rotate(-4deg); }
+  to   { transform: rotate(4deg) translateY(-2px); }
+}
+
+.acting-excited .pet-cyl { animation: excBounce .4s ease-in-out 8 alternate; }
+@keyframes excBounce {
+  from { transform: translateY(0) scale(1.03,.96) rotateZ(-5deg); }
+  to   { transform: translateY(-16px) scale(.97,1.05) rotateZ(5deg); }
+}
+
+.acting-jump .pet-cyl { animation: jumpUp 1.05s cubic-bezier(.3,0,.4,1); }
+@keyframes jumpUp {
+  0%   { transform: translateY(0) scale(1,1); }
+  18%  { transform: translateY(7px) scale(1.09,.89); }
+  45%  { transform: translateY(-44px) scale(.93,1.12); }
+  70%  { transform: translateY(0) scale(1.08,.9); }
+  86%  { transform: translateY(-8px) scale(.99,1.02); }
+  100% { transform: translateY(0) scale(1,1); }
+}
+.acting-jump .pet-shadow { animation: shadowJump 1.05s cubic-bezier(.3,0,.4,1); }
+@keyframes shadowJump {
+  0%,100% { transform: translateX(-50%) scale(1); opacity: 1; }
+  45%     { transform: translateX(-50%) scale(.62); opacity: .5; }
+}
+
+.acting-walk .pet-cyl { animation: walkRock 2s ease-in-out; }
+@keyframes walkRock {
+  0%,100% { transform: translateX(0) rotateZ(0); }
+  25%  { transform: translateX(18px) rotateZ(5deg) rotateY(14deg); }
+  50%  { transform: translateX(0) rotateZ(0); }
+  75%  { transform: translateX(-18px) rotateZ(-5deg) rotateY(-14deg); }
+}
+
+.acting-nod .pet-cyl { animation: nodIt .55s ease-in-out 4; }
+@keyframes nodIt {
+  0%,100% { transform: scale(1,1); }
+  40% { transform: scale(1.05,.93) translateY(5px); }
+}
+
+.acting-sleep .pose-sleep { animation: sleepSway 3.6s ease-in-out infinite alternate; }
+@keyframes sleepSway {
+  from { transform: rotate(-2.5deg); }
+  to   { transform: rotate(2.5deg); }
+}
+
+/* ---------- Zzz ---------- */
+.zzz { position: absolute; right: -6px; top: -4px; opacity: 0; pointer-events: none; transition: opacity .3s; }
+.acting-sleep .zzz { opacity: 1; }
+.zzz span {
+  position: absolute; right: 0; top: 0;
+  color: #9fb7ff; font: bold 18px "Comic Sans MS", system-ui;
+  animation: zfloat 2.1s ease-in-out infinite;
+}
+.zzz span:nth-child(2) { font-size: 14px; animation-delay: .6s; right: 12px; top: -2px; }
+.zzz span:nth-child(3) { font-size: 11px; animation-delay: 1.2s; right: 22px; top: 2px; }
+@keyframes zfloat {
+  0% { transform: translate(0,8px); opacity: 0; }
+  30% { opacity: .95; }
+  100% { transform: translate(10px,-20px); opacity: 0; }
+}
+
+/* ---------- 气泡（深色底保证在任意桌面壁纸上都可读） ---------- */
+.bubble {
+  position: absolute;
+  left: 50%; bottom: calc(100% + 16px);
+  transform: translateX(-50%) translateY(6px) scale(.92);
+  background: rgba(22, 27, 42, .90);
+  border: 1px solid rgba(255,255,255,.14);
+  color: #ECEFF7;
+  font-size: 13px; line-height: 1.5;
+  padding: 8px 13px;
+  border-radius: 14px 14px 4px 14px;
+  white-space: nowrap;
+  opacity: 0; visibility: hidden;
+  transition: opacity .25s, transform .25s, visibility 0s linear .25s;
+  pointer-events: none;
+  z-index: 5;
+}
+.bubble.show {
+  opacity: 1; visibility: visible;
+  transform: translateX(-50%) translateY(0) scale(1);
+  transition: opacity .25s, transform .25s, visibility 0s;
+}
+
+/* ---------- 状态外观（M3 养成系统驱动） ---------- */
+/* 饿：整体没精神，呼吸变慢 */
+.mood-low .pet-3d { animation-duration: 5.5s; filter: saturate(.72) brightness(.94); }
+/* 难过：更灰、更暗 */
+.mood-critical .pet-3d { animation-duration: 6.5s; filter: saturate(.5) brightness(.86); }
+/* 开心：轻微提亮 */
+.mood-happy .pet-3d { filter: saturate(1.12) brightness(1.04); }

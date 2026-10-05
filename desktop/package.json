@@ -1,0 +1,24 @@
+{
+  "name": "js-pet",
+  "version": "0.1.0",
+  "description": "js-pet — 桌面电子宠物，常驻桌面、轻度养成、数据本地持久化",
+  "main": "src/main/index.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "smoke": "node tools/smoke.js",
+    "norm-look": "node tools/normalize-look.js",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:all": "electron-builder --win --mac"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "pngjs": "^7.0.0"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  }
+}

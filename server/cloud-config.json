@@ -1,0 +1,5 @@
+{
+  "_comment": "WorkBuddy 云服务 publicConfig（发布时由部署流程生成；publishableKey 无权限含义，可随应用分发）",
+  "endpoint": "https://tidylab.app.workbuddy.host",
+  "publishableKey": "wbpk_1XLN5W4o7DF39CpWBV6u7D_QpJAJQ9UR9fEjj6fgG87baTDw4L1Fhnp"
+}

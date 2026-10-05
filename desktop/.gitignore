@@ -1,0 +1,12 @@
+# 依赖与构建产物
+node_modules/
+dist/
+
+# 临时调试
+tmpdbg/
+*.log
+
+# 系统杂项
+.DS_Store
+Thumbs.db
+desktop.ini

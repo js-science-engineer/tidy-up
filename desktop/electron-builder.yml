@@ -1,0 +1,56 @@
+appId: com.jspet.desktop
+productName: js-pet
+copyright: Copyright © 2026 js-pet
+
+directories:
+  output: dist
+  buildResources: build
+
+# M7-5 体积优化：只进运行时代码与素材。
+# 排除：测试、构建工具、备份素材、演示页、构建期绿幕原图（约 -12MB）
+# 注意：生产依赖（dependencies，如 pngjs）由 electron-builder 自动打入，
+# devDependencies（electron/electron-builder）自动排除，无需手写 node_modules 排除。
+files:
+  - package.json
+  - src/main/**
+  - src/preload/**
+  - src/shared/**
+  - src/renderer/**
+  - src/assets/**
+  - "!src/assets/builtin-looks/**"
+  - "!**/*.map"
+
+extraMetadata:
+  main: src/main/index.js
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: js-pet
+  artifactName: ${productName}-${version}-setup.${ext}
+  deleteAppDataOnUninstall: false
+
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}
+
+mac:
+  icon: build/icon@2x.png
+  category: public.app-category.entertainment
+  identity: null
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
