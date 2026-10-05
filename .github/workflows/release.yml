@@ -50,7 +50,7 @@ jobs:
         working-directory: desktop
         run: npm ci
 
-      - name: 桌面版 · 运行测试（113 项）
+      - name: 桌面版 · 运行测试（117 项）
         working-directory: desktop
         run: npm test
 

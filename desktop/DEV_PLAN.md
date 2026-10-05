@@ -350,7 +350,7 @@ function settle(stats, now) {
 ## 7. 开工第一步（可立即执行）
 
 ```bash
-cd C:/Users/Lenovo/Desktop/js-pet
+cd <本仓库>/desktop   # 即 js-pet 源码目录，按实际路径调整
 npm init -y
 npm i -D electron@latest electron-builder@latest
 ```

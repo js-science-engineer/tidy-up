@@ -148,7 +148,7 @@ test('M7.11 system/info：版本号与云模式标记（本地默认 false）', 
 
 test('M7.12 system/info：TIDY_CLOUD=1 时返回云配置', async (t) => {
   const dataDir = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'tidy-cloud-'));
-  const proc = spawn(process.env.NODE_EXE || 'C:/Users/Lenovo/.workbuddy/binaries/node/versions/22.22.2-3/node.exe',
+  const proc = spawn(process.env.NODE_EXE || process.execPath,
     ['server/index.js'], {
       cwd: require('path').join(__dirname, '..'),
       env: { ...process.env, PORT: '0', TIDY_DATA_DIR: dataDir, TIDY_CLOUD: '1' },

@@ -4,7 +4,9 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const NODE = process.env.NODE_EXE || 'C:/Users/Lenovo/.workbuddy/binaries/node/versions/22.22.2-3/node.exe';
+// 默认复用「正在运行测试的这个 Node 本体」，跨机器/CI 自动正确；
+// 如需指定其它解释器，可设环境变量 NODE_EXE 覆盖。
+const NODE = process.env.NODE_EXE || process.execPath;
 const ROOT = path.join(__dirname, '..');
 
 async function startServer({ dataDir: fixedData, backupDir: fixedBackup, timeoutMs = 25000 } = {}) {
