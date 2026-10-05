@@ -13,6 +13,7 @@
     "test": "node --test test/m1.test.js test/m2.test.js test/m3.test.js test/m4.test.js test/m5.test.js test/m6.frontend.test.js test/m7.cloud.test.js test/m8.cloudapi.test.js"
   },
   "dependencies": {
+    "adm-zip": "^0.6.1",
     "archiver": "^7.0.1",
     "express": "^4.22.3",
     "multer": "^1.4.5-lts.2"

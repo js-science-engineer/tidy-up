@@ -1,9 +1,9 @@
-// 备份 / 恢复（zip；恢复走 PowerShell Expand-Archive，恢复后需重启服务）
+// 备份 / 恢复（zip；解压走 adm-zip 纯 JS 实现，Windows / macOS / Linux 通用；恢复后需重启服务）
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
 const archiver = require('archiver');
+const AdmZip = require('adm-zip');
 const { ok, wrap, ApiError } = require('../util');
 const { DATA_DIR, IMAGES_DIR, BACKUPS_DIR, DB_FILE, CONFIG_FILE, ensureDirs } = require('../paths');
 
@@ -71,14 +71,15 @@ router.post('/restore', wrap(async (req, res) => {  const file = String(req.body
   // 1) 恢复前应急备份当前数据
   const emergency = await zipDir();
 
-  // 2) 解压到临时目录（Windows 内置 PowerShell Expand-Archive）
+  // 2) 解压到临时目录（adm-zip 纯 JS 实现，跨平台，不依赖系统命令）
   const tmp = path.join(DATA_DIR, 'restore-tmp-' + Date.now());
   fs.mkdirSync(tmp, { recursive: true });
-  await new Promise((resolve, reject) => {
-    execFile('powershell.exe', ['-NoProfile', '-Command',
-      `Expand-Archive -LiteralPath "${zipPath}" -DestinationPath "${tmp}" -Force`],
-      { windowsHide: true, timeout: 60000 }, (err) => (err ? reject(new ApiError(500, '解压失败：' + err.message)) : resolve()));
-  });
+  try {
+    new AdmZip(zipPath).extractAllTo(tmp, true);
+  } catch (err) {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    throw new ApiError(500, '解压失败：' + err.message);
+  }
 
   // 3) 覆盖数据
   const newDb = path.join(tmp, 'tidy.db');
