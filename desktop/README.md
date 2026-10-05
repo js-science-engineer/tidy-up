@@ -8,7 +8,7 @@
 
 ## 下载使用
 
-去 [Releases](docs/release.md) 下载对应安装包：
+去 [Releases](../../../releases) 下载对应安装包（版本说明见 [docs/release.md](docs/release.md)）：
 
 - **Windows 安装版** `js-pet-x.x.x-setup.exe`：双击安装，有快捷方式，可卸载（推荐）
 - **Windows 绿色版** `js-pet-x.x.x-portable.exe`：单文件双击即用，不写注册表

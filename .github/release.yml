@@ -1,0 +1,40 @@
+# ============================================================================
+#  GitHub 自动生成的 Release Notes 分类规则
+#  用于「打 tag 发布」时按 PR 标签把变更自动归类。
+#  标签名可按你仓库实际使用的标签调整；未匹配的走「其他变更」。
+# ============================================================================
+changelog:
+  exclude:
+    labels:
+      - 跳过发布说明
+      - skip-changelog
+  categories:
+    - title: 🚀 新功能
+      labels:
+        - feature
+        - enhancement
+        - 功能
+    - title: 🐛 修复
+      labels:
+        - bug
+        - fix
+        - 修复
+    - title: ⚡ 性能
+      labels:
+        - performance
+        - perf
+        - 性能
+    - title: 📝 文档
+      labels:
+        - documentation
+        - docs
+        - 文档
+    - title: 🔧 构建与依赖
+      labels:
+        - build
+        - ci
+        - dependencies
+        - 构建
+    - title: 其他变更
+      labels:
+        - '*'

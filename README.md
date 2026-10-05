@@ -53,11 +53,16 @@ TidyLab 是一套面向实验室/工作室的物品收纳管理工具，把「�
 ```
 tidy-up(2)/
 ├── README.md                 ← 你正在看的文件
+├── CHANGELOG.md              两套产品的版本变更记录
 ├── LICENSE                   MIT 许可
-├── .gitignore
+├── .gitignore / .gitattributes
 ├── package.json              网页版依赖与脚本
 ├── start.bat                 Windows 一键启动（自动装依赖 + 开浏览器）
 ├── start.sh                  macOS / Linux 一键启动
+│
+├── .github/
+│   ├── workflows/release.yml 打 tag 自动测试 + 构建安装包 + 发 Release
+│   └── release.yml           Release Notes 自动分类规则
 │
 ├── server/                   网页版 · 后端（Express + SQLite）
 │   ├── index.js              服务入口（静态托管 + API + 局域网监听）
@@ -84,9 +89,8 @@ tidy-up(2)/
 │   └── m8.cloudapi          云适配器与鉴权隔离
 │
 ├── docs/                     📚 全部文档（详见文末「文档索引」）
-│   ├── 安装指南.md
-│   ├── 使用手册.md
-│   ├── 版本说明.md
+│   ├── 安装指南.md / 使用手册.md / 版本说明.md
+│   ├── 发布流程.md / 发布说明_v0.7.0.md
 │   ├── PRD.md / 需求文档_v1.md / 开发计划.md / 开发计划_v2.md / 测试报告.md / 下一步开发计划.md
 │   └── design/               设计效果图与宠物原型页（HTML，可直接浏览器打开）
 │
@@ -155,7 +159,7 @@ npm run build:win  # 打 Windows 安装包 + 便携版
 npm run build:mac  # 打 macOS dmg（需在 macOS 上执行）
 ```
 
-安装包使用（发布后从 Releases 下载）：
+安装包请到 **[Releases](../../releases)** 下载（由 GitHub Actions 在推送 `desktop-v*` tag 时自动构建，流程见 [发布流程](docs/发布流程.md)）：
 
 - **Windows 安装版** `js-pet-0.1.0-setup.exe`：双击安装，含桌面/开始菜单快捷方式，可卸载（卸载保留用户数据）
 - **Windows 便携版** `js-pet-0.1.0-portable.exe`：单文件双击即用，不写注册表
@@ -187,15 +191,20 @@ cd desktop && npm test   # 113 项
 - **运行时数据** —— `data/`（SQLite 库、上传图片）与 `backups/` 属本机数据，且 `data/config.json` 含真实 API Key，**严禁提交**。
 - **AI 生成的美术源文件** —— `pet-assets/` 下约 10 MB 的原始生成大图、`desktop/src/assets/builtin-looks/raw{2}/` 约 14 MB 的绿幕原图属中间素材，运行时不需要（打包配置已显式排除），故未纳入本仓库以保持体积精简；如需二次加工美术，请从原工程取用。
 
+> 📦 **安装包不在仓库里**（每个约 90~110 MB）。Windows / macOS 安装包通过 **[Releases](../../releases)** 分发，由 GitHub Actions 在你推送 `desktop-v*` tag 时自动构建并上传（见 [发布流程](docs/发布流程.md)）。
+
 ---
 
 ## 文档索引
 
 | 文档 | 内容 |
 |---|---|
+| [CHANGELOG.md](CHANGELOG.md) | 两套产品的版本变更记录（Keep a Changelog 格式） |
 | [docs/安装指南.md](docs/安装指南.md) | 网页版本地安装、AI Key 申请配置、云端部署、桌面版安装、常见问题 |
 | [docs/使用手册.md](docs/使用手册.md) | 六大模块完整操作说明、识别入库两种模式、出库、宠物玩法、备份恢复 |
 | [docs/版本说明.md](docs/版本说明.md) | 网页版 / 桌面版各版本演进、版本号与提交对照、本仓库整理说明 |
+| [docs/发布流程.md](docs/发布流程.md) | 改版本号 → 打 tag → CI 自动构建 → 发布 Release 的完整步骤与检查清单 |
+| [docs/发布说明_v0.7.0.md](docs/发布说明_v0.7.0.md) | 网页版 v0.7.0 发布说明（Release 正文来源） |
 | [docs/PRD.md](docs/PRD.md) | 产品需求文档（v1.0 基线 + v2.0 上线增补） |
 | [docs/需求文档_v1.md](docs/需求文档_v1.md) | v1.1 最终确认版（功能细节、供应商对比、UI 规范） |
 | [docs/开发计划.md](docs/开发计划.md) / [开发计划_v2.md](docs/开发计划_v2.md) | v1.0 / v2.0 可执行开发计划 |

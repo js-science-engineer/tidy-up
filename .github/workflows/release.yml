@@ -1,0 +1,153 @@
+# ============================================================================
+#  Release —— 打 tag 自动测试并发布
+#
+#  一个仓库两个产品，用 tag 前缀区分：
+#    desktop-v0.1.0  → 构建 Windows 安装版 + 便携版，上传到 GitHub Release
+#    web-v0.7.0      → 创建 Release（源码快照由 GitHub 自动附带，正文取发布说明）
+#
+#  另外支持手动触发构建 macOS dmg（未签名，见 desktop/docs/BUILD_MAC.md）。
+#  完整步骤见 docs/发布流程.md
+# ============================================================================
+name: Release
+
+on:
+  push:
+    tags:
+      - 'desktop-v*'   # 桌面版 js-pet
+      - 'web-v*'       # 网页版 TidyLab
+  workflow_dispatch:
+    inputs:
+      build_mac:
+        description: '构建 macOS dmg（未签名，仅手动触发时生效）'
+        type: boolean
+        default: false
+
+# 创建 Release 需要写权限
+permissions:
+  contents: write
+
+jobs:
+  # ------------------------------------------------------------------
+  # 发布前置：两套产品的测试都通过才允许发布
+  # ------------------------------------------------------------------
+  test:
+    name: 测试（网页版 + 桌面版）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 网页版 · 安装依赖
+        run: npm ci
+
+      - name: 网页版 · 运行测试（66 项）
+        run: npm test
+
+      - name: 桌面版 · 安装依赖
+        working-directory: desktop
+        run: npm ci
+
+      - name: 桌面版 · 运行测试（113 项）
+        working-directory: desktop
+        run: npm test
+
+  # ------------------------------------------------------------------
+  # 桌面版：构建 Windows 安装版 + 便携版并发布
+  # ------------------------------------------------------------------
+  release-desktop:
+    name: 发布桌面版（Windows 安装包）
+    needs: test
+    if: startsWith(github.ref_name, 'desktop-v')
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 构建（NSIS 安装版 + portable 便携版）
+        run: npm run build:win
+
+      - name: 列出构建产物
+        run: dir dist
+
+      # 产物为 desktop/dist/js-pet-<版本>-setup.exe 与 -portable.exe
+      - name: 创建 Release 并上传安装包
+        working-directory: .
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          gh release create "$TAG" \
+            --title "js-pet ${TAG#desktop-}" \
+            --generate-notes \
+            desktop/dist/*.exe
+
+  # ------------------------------------------------------------------
+  # 网页版：创建 Release（源码快照 GitHub 自动附带）
+  # ------------------------------------------------------------------
+  release-web:
+    name: 发布网页版
+    needs: test
+    if: startsWith(github.ref_name, 'web-v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 创建 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VER="${TAG#web-}"
+          NOTES="docs/发布说明_${VER}.md"
+          if [ -f "$NOTES" ]; then
+            gh release create "$TAG" --title "TidyLab 网页版 $VER" --notes-file "$NOTES"
+          else
+            gh release create "$TAG" --title "TidyLab 网页版 $VER" --generate-notes
+          fi
+
+  # ------------------------------------------------------------------
+  # macOS dmg（手动触发；未签名，首次打开需右键放行）
+  # 说明：Windows 环境无法构建 mac 包，这里用 macOS runner 代劳。
+  # ------------------------------------------------------------------
+  build-mac:
+    name: 构建 macOS dmg（手动，未签名）
+    if: github.event_name == 'workflow_dispatch' && inputs.build_mac
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 运行测试
+        run: npm test
+
+      - name: 构建 dmg（x64 + arm64）
+        run: npm run build:mac
+
+      - name: 上传构建产物（工作流附件，需自行下载后手动发布）
+        uses: actions/upload-artifact@v4
+        with:
+          name: js-pet-macos-dmg
+          path: desktop/dist/*.dmg
+          if-no-files-found: error
