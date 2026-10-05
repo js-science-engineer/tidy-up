@@ -37,6 +37,10 @@ jobs:
   test:
     name: 测试（网页版 + 桌面版）
     runs-on: ubuntu-latest
+    env:
+      # 兜底：即便 runner 上的 Node 低于 22.13，也保证 node:sqlite 可用
+      # （该标志在 Node 22.5+ 均被接受，22.13+ 只是变为非必需）
+      NODE_OPTIONS: '--experimental-sqlite'
     steps:
       - uses: actions/checkout@v4
 
@@ -48,7 +52,7 @@ jobs:
         run: |
           node -v
           npm -v
-          node -e "require('node:sqlite'); console.log('node:sqlite 可用')"
+          node -e "try{require('node:sqlite');console.log('node:sqlite 可用')}catch(e){console.log('node:sqlite 不可用: '+e.message)}"
 
       - name: 网页版 · 安装依赖
         run: |
@@ -105,6 +109,17 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
           exit $rc
+
+      # 把失败关键行写成 check annotation：无仓库管理权限、下载不到原始日志时也能看到原因
+      - name: 失败诊断（关键行写入注解）
+        if: failure()
+        run: |
+          for f in /tmp/web-ci.log /tmp/web-test.log /tmp/desk-ci.log /tmp/desk-test.log; do
+            [ -f "$f" ] || continue
+            D=$(grep -aE '^not ok|^# fail|npm error|npm ERR|Error|Cannot find module|Timeout|服务未能' "$f" | head -6 | tr '\n' '~' | cut -c1-700)
+            [ -n "$D" ] && echo "::error title=$(basename "$f")::$D"
+          done
+          exit 0
 
   # ------------------------------------------------------------------
   # 桌面版：构建 Windows 安装版 + 便携版并发布
