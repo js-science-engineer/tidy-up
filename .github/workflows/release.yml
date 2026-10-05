@@ -51,18 +51,60 @@ jobs:
           node -e "require('node:sqlite'); console.log('node:sqlite 可用')"
 
       - name: 网页版 · 安装依赖
-        run: npm ci
+        run: |
+          set +e
+          npm ci 2>&1 | tee /tmp/web-ci.log
+          rc=${PIPESTATUS[0]}
+          if [ $rc -ne 0 ]; then
+            { echo "## ❌ 网页版依赖安装失败"; echo '```'; tail -30 /tmp/web-ci.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit $rc
 
       - name: 网页版 · 运行测试（66 项）
-        run: npm test
+        run: |
+          set +e
+          npm test 2>&1 | tee /tmp/web-test.log
+          rc=${PIPESTATUS[0]}
+          if [ $rc -ne 0 ]; then
+            {
+              echo "## ❌ 网页版测试失败"
+              echo '```'
+              grep -aE "^not ok|^# (tests|pass|fail)|Error|Cannot find module|Timeout|服务未能" /tmp/web-test.log | head -25
+              echo "--- 输出末尾 ---"
+              tail -35 /tmp/web-test.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit $rc
 
       - name: 桌面版 · 安装依赖
         working-directory: desktop
-        run: npm ci
+        run: |
+          set +e
+          npm ci 2>&1 | tee /tmp/desk-ci.log
+          rc=${PIPESTATUS[0]}
+          if [ $rc -ne 0 ]; then
+            { echo "## ❌ 桌面版依赖安装失败"; echo '```'; tail -30 /tmp/desk-ci.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit $rc
 
       - name: 桌面版 · 运行测试（117 项）
         working-directory: desktop
-        run: npm test
+        run: |
+          set +e
+          npm test 2>&1 | tee /tmp/desk-test.log
+          rc=${PIPESTATUS[0]}
+          if [ $rc -ne 0 ]; then
+            {
+              echo "## ❌ 桌面版测试失败"
+              echo '```'
+              grep -aE "^not ok|^# (tests|pass|fail)|Error|Cannot find module|Timeout" /tmp/desk-test.log | head -25
+              echo "--- 输出末尾 ---"
+              tail -35 /tmp/desk-test.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit $rc
 
   # ------------------------------------------------------------------
   # 桌面版：构建 Windows 安装版 + 便携版并发布
