@@ -76,10 +76,10 @@ window.Components.SideNav = {
   template: `
   <nav class="sidebar liquid glass">
     <a class="nav-btn" v-for="m in modules" :key="m.key" :class="{active: view===m.key}" :href="m.hash">
-      <span class="ic">{{ m.icon }}</span><span class="tip">{{ m.label }}</span>
+      <span class="ic">{{ m.icon }}</span><span class="tip">{{ t('nav.' + m.key) }}</span>
     </a>
-    <a class="nav-btn sort-toggle" href="#" :class="{active: sorting}" @click.prevent="openSort" title="调整模块顺序">
-      <span class="ic">⇅</span><span class="tip">调整模块顺序</span>
+    <a class="nav-btn sort-toggle" href="#" :class="{active: sorting}" @click.prevent="openSort" :title="t('nav.sort')">
+      <span class="ic">⇅</span><span class="tip">{{ t('nav.sort') }}</span>
     </a>
   </nav>
 
@@ -89,10 +89,10 @@ window.Components.SideNav = {
       <div style="display:flex;align-items:center;gap:13px;margin-bottom:14px">
         <div class="recog-img" style="width:46px;height:46px;font-size:20px">⇅</div>
         <div style="flex:1">
-          <div style="font-weight:650;font-size:16px">调整模块顺序</div>
-          <div class="muted" style="font-size:12.5px">拖动整行，或点 ▲▼ 微调；排第一位的就是打开网站的首页</div>
+          <div style="font-weight:650;font-size:16px">{{ t('nav.sort') }}</div>
+          <div class="muted" style="font-size:12.5px">{{ t('nav.sortTip') }}</div>
         </div>
-        <button class="btn-ghost" @click="closeSort">完成</button>
+        <button class="btn-ghost" @click="closeSort">{{ t('nav.sortDone') }}</button>
       </div>
       <div class="sort-list">
         <div class="sort-row" v-for="(m, i) in modules" :key="m.key"
@@ -101,13 +101,13 @@ window.Components.SideNav = {
              @dragleave="onDragLeave(m)" @drop.prevent="onDrop(m)" @dragend="onDragEnd">
           <span class="drag-handle">⠿</span>
           <span class="sort-ic">{{ m.icon }}</span>
-          <span class="sort-name">{{ m.label }}</span>
-          <span class="sbtn" :class="{off: i===0}" @click="move(i, -1)" title="上移">▲</span>
-          <span class="sbtn" :class="{off: i===modules.length-1}" @click="move(i, 1)" title="下移">▼</span>
+          <span class="sort-name">{{ t('nav.' + m.key) }}</span>
+          <span class="sbtn" :class="{off: i===0}" @click="move(i, -1)" :title="t('nav.moveUp')">▲</span>
+          <span class="sbtn" :class="{off: i===modules.length-1}" @click="move(i, 1)" :title="t('nav.moveDown')">▼</span>
         </div>
       </div>
       <div class="form-row" style="margin-top:12px">
-        <button class="btn-ghost" @click="resetOrder">↺ 恢复默认顺序</button>
+        <button class="btn-ghost" @click="resetOrder">{{ t('nav.sortReset') }}</button>
       </div>
     </div>
   </div>`,

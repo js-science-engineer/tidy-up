@@ -26,7 +26,7 @@ window.Components.SettingsPage = {
         if (!this.isCloud) patch.port = this.cfg.port;
         this.cfg = await api('PUT', '/settings', patch);
         this.keyInput = { glm: '', qwen: '' };
-        this.msg = '✅ 设置已保存';
+        this.msg = t('set.saved');
       } catch (e) { this.err = e.message; }
       finally { this.busy = false; }
     },
@@ -34,78 +34,89 @@ window.Components.SettingsPage = {
       this.msg = ''; this.err = '';
       try {
         const r = await api('POST', '/settings/test-ai');
-        this.msg = '✅ AI 连通正常：' + r.reply;
+        this.msg = t('set.aiOk') + r.reply;
       } catch (e) { this.err = e.message; }
     },
     async backupNow() {
       this.busy = true; this.msg = ''; this.err = '';
       try {
         const r = await api('POST', '/backup');
-        this.msg = '✅ 已备份：' + r.file;
+        this.msg = t('set.backedUp') + r.file;
         this.backups = r.backups;
       } catch (e) { this.err = e.message; }
       finally { this.busy = false; }
     },
     async restore(b) {
-      if (!confirm(`用「${b.file}」恢复数据？当前数据会先做一次应急备份，恢复后需要重启服务。`)) return;
+      if (!confirm(t('set.restoreConfirm', { file: b.file }))) return;
       this.busy = true; this.msg = ''; this.err = '';
       try {
         const r = await api('POST', '/backup/restore', { file: b.file });
-        this.msg = `✅ 已恢复 ${r.restored}（应急备份：${r.emergencyBackup}）。请关闭本页面并重新双击启动程序。`;
+        this.msg = t('set.restored', { restored: r.restored, eb: r.emergencyBackup });
       } catch (e) { this.err = e.message; }
       finally { this.busy = false; }
     },
+    // 中 / 英切换：i18n 模块内部持久化并即时刷新全界面
+    pickLang(lang) { setLang(lang); },
     sizeText(n) { return n > 1024 * 1024 ? (n / 1024 / 1024).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB'; },
   },
   template: `
   <section class="screen">
-    <div class="page-title">设置</div>
-    <div class="page-sub">AI 供应商 · 数据备份与恢复 · 手机访问</div>
+    <div class="page-title">{{ t('set.title') }}</div>
+    <div class="page-sub">{{ t('set.sub') }}</div>
 
     <div class="settings">
       <div class="glass card" v-if="cfg">
-        <h3 class="sec">🤖 AI 识别服务</h3>
+        <h3 class="sec">🌐 {{ t('set.langTitle') }}</h3>
+        <div class="seg" style="width:auto;justify-content:flex-start">
+          <button class="chip" :class="{on: getLang()==='zh'}" @click="pickLang('zh')">中文</button>
+          <button class="chip" :class="{on: getLang()==='en'}" @click="pickLang('en')">English</button>
+        </div>
+        <div class="muted" style="margin-top:8px">{{ t('set.langNote') }}</div>
+      </div>
+
+      <div class="glass card" v-if="cfg">
+        <h3 class="sec">{{ t('set.aiTitle') }}</h3>
         <div class="form-grid">
-          <label>供应商</label>
+          <label>{{ t('set.provider') }}</label>
           <select v-model="cfg.provider" style="max-width:280px">
-            <option value="glm">智谱 GLM-4V-Flash（免费，推荐）</option>
-            <option value="qwen">阿里云百炼 Qwen-VL</option>
+            <option value="glm">{{ t('set.glmOpt') }}</option>
+            <option value="qwen">{{ t('set.qwenOpt') }}</option>
           </select>
-          <label>智谱 API Key</label>
-          <input v-model="keyInput.glm" :placeholder="cfg._hasGlmKey ? ('已保存：' + cfg.glm.key) : '尚未设置'" type="password" style="max-width:420px">
-          <label>Qwen API Key</label>
-          <input v-model="keyInput.qwen" :placeholder="cfg._hasQwenKey ? ('已保存：' + cfg.qwen.key) : '尚未设置'" type="password" style="max-width:420px">
-          <label>GLM 模型</label><input v-model="cfg.glm.model" style="max-width:280px">
-          <label>Qwen 模型</label><input v-model="cfg.qwen.model" style="max-width:280px">
+          <label>{{ t('set.glmKey') }}</label>
+          <input v-model="keyInput.glm" :placeholder="cfg._hasGlmKey ? (t('set.savedAs') + cfg.glm.key) : t('set.notSet')" type="password" style="max-width:420px">
+          <label>{{ t('set.qwenKey') }}</label>
+          <input v-model="keyInput.qwen" :placeholder="cfg._hasQwenKey ? (t('set.savedAs') + cfg.qwen.key) : t('set.notSet')" type="password" style="max-width:420px">
+          <label>{{ t('set.glmModel') }}</label><input v-model="cfg.glm.model" style="max-width:280px">
+          <label>{{ t('set.qwenModel') }}</label><input v-model="cfg.qwen.model" style="max-width:280px">
         </div>
         <div class="actions">
-          <button class="btn-main" :disabled="busy" @click="save">保存设置</button>
-          <button class="btn-ghost" :disabled="busy" @click="testAi">测试 AI 连通</button>
+          <button class="btn-main" :disabled="busy" @click="save">{{ t('set.save') }}</button>
+          <button class="btn-ghost" :disabled="busy" @click="testAi">{{ t('set.testAi') }}</button>
         </div>
       </div>
 
       <div class="glass card" v-if="info && !isCloud">
-        <h3 class="sec">📱 手机访问（需同一 WiFi）</h3>
+        <h3 class="sec">{{ t('set.phoneTitle') }}</h3>
         <div class="today-row" v-for="u in info.lanUrls" :key="u"><div class="grow">{{ u }}</div></div>
-        <div class="muted" v-if="!info.lanUrls.length">未检测到局域网地址（未联网或仅本机可用）</div>
+        <div class="muted" v-if="!info.lanUrls.length">{{ t('set.noLan') }}</div>
       </div>
 
       <div class="glass card" v-if="!isCloud">
-        <h3 class="sec">💾 数据备份与恢复</h3>
+        <h3 class="sec">{{ t('set.backupTitle') }}</h3>
         <div class="actions" style="margin:0 0 14px">
-          <button class="btn-main" :disabled="busy" @click="backupNow">立即备份</button>
-          <span class="muted">每次启动会自动备份一次，保留最近 10 份</span>
+          <button class="btn-main" :disabled="busy" @click="backupNow">{{ t('set.backupNow') }}</button>
+          <span class="muted">{{ t('set.backupNote') }}</span>
         </div>
         <div class="backup-row" v-for="b in backups" :key="b.file">
           <div class="grow">{{ b.file }} <span class="muted">{{ sizeText(b.size) }}</span></div>
-          <button class="btn-ghost btn-danger" :disabled="busy" @click="restore(b)">从此备份恢复</button>
+          <button class="btn-ghost btn-danger" :disabled="busy" @click="restore(b)">{{ t('set.restore') }}</button>
         </div>
-        <div v-if="!backups.length" class="empty">暂无备份</div>
+        <div v-if="!backups.length" class="empty">{{ t('set.noBackups') }}</div>
       </div>
 
       <div class="glass card" v-if="isCloud">
-        <h3 class="sec">☁️ 云端数据</h3>
-        <div class="muted">数据由云数据库与云文件存储托管，随账号多设备同步，无需本地备份。</div>
+        <h3 class="sec">{{ t('set.cloudTitle') }}</h3>
+        <div class="muted">{{ t('set.cloudNote') }}</div>
       </div>
 
       <div class="ai-hint" v-if="msg">{{ msg }}</div>

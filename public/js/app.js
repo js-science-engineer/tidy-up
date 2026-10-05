@@ -50,9 +50,9 @@
       <search-page v-else-if="view==='search'"></search-page>
       <stats-page v-else-if="view==='stats'"></stats-page>
       <settings-page v-else-if="view==='settings'"></settings-page>
-      <div v-else class="glass card"><div class="empty">页面不存在</div></div>
+      <div v-else class="glass card"><div class="empty">{{ t('app.notFound') }}</div></div>
       <div class="footer-note" style="text-align:center;color:var(--text-3);font-size:12px;margin:34px 0 8px">
-        TidyLab · 实验室物品收纳管理系统 · {{ isCloud ? '数据云端同步（多设备可用）' : '数据保存在本机' }}
+        TidyLab · {{ t('footer.product') }} · {{ isCloud ? t('footer.cloud') : t('footer.local') }}
       </div>
     </main>
     <auth-page v-if="store.authRequired"></auth-page>
@@ -66,6 +66,10 @@
   app.config.globalProperties.api = window.api;
   app.config.globalProperties.imgSrc = window.imgSrc;
   app.config.globalProperties.store = window.store;
+  // i18n：t() 在模板里调用会追踪 reactive 语言状态 → 切换语言全界面即时刷新
+  app.config.globalProperties.t = window.t;
+  app.config.globalProperties.getLang = window.getLang;
+  app.config.globalProperties.setLang = window.setLang;
   // 等启动引导完成（本地模式立即；云端模式需等待会话检查/登录）再挂载
   window.__tidyBoot.then(() => {
     app.mount('#app');

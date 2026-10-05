@@ -4,10 +4,12 @@ window.Components.TopBar = {
   emits: ['toggle-theme', 'toast'],
   data: () => ({ q: '', now: new Date(), timer: null }),
   computed: {
-    // 右上角当地时间：日期 + 星期
+    // 右上角当地时间：日期 + 星期（星期文案随语言切换）
     clockDate() {
       const d = this.now;
-      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} 周${'日一二三四五六'[d.getDay()]}`;
+      const week = t('topbar.weekdays')[d.getDay()];
+      const suffix = t('topbar.weekPrefix') ? t('topbar.weekPrefix') + week : week;
+      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${suffix}`;
     },
     // 时:分:秒（每秒跳动）
     clockTime() {
@@ -26,14 +28,14 @@ window.Components.TopBar = {
   },
   template: `
   <header class="topbar liquid glass">
-    <div class="brand"><div class="logo">🧊</div><span>TidyLab · 实验室收纳</span></div>
-    <div class="search glass">🔎<input v-model="q" placeholder="搜索物品，试试「那个蓝色的测电压的东西」…" @keyup.enter="go"></div>
+    <div class="brand"><div class="logo">🧊</div><span>{{ t('topbar.brand') }}</span></div>
+    <div class="search glass">🔎<input v-model="q" :placeholder="t('topbar.searchPh')" @keyup.enter="go"></div>
     <div style="flex:1"></div>
-    <div class="clock glass" :title="'当地时间 ' + clockDate + ' ' + clockTime">
+    <div class="clock glass" :title="t('topbar.localTime') + ' ' + clockDate + ' ' + clockTime">
       <span class="clock-date">{{ clockDate }}</span>
       <b class="clock-time">{{ clockTime }}</b>
     </div>
-    <div class="icon-pill glass" @click="$emit('toggle-theme')" :title="theme==='dark'?'切换浅色':'切换深色'">{{ theme==='dark' ? '🌙' : '☀️' }}</div>
+    <div class="icon-pill glass" @click="$emit('toggle-theme')" :title="theme==='dark' ? t('topbar.toLight') : t('topbar.toDark')">{{ theme==='dark' ? '🌙' : '☀️' }}</div>
   </header>`,
 };
 

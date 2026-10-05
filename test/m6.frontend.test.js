@@ -50,6 +50,9 @@ function loadVueGlobal() {
 
 function loadComponents(box) {
   vm.runInContext('window.Components = window.Components || {};', box);
+  // i18n 必须先于组件加载（与 index.html 的脚本顺序一致）：组件内的 t() 依赖它
+  const i18nSrc = fs.readFileSync(path.join(ROOT, 'public', 'js', 'i18n.js'), 'utf8');
+  vm.runInContext(i18nSrc, box, { filename: 'i18n.js' });
   for (const f of fs.readdirSync(COMPONENT_DIR).filter((f) => f.endsWith('.js'))) {
     const code = fs.readFileSync(path.join(COMPONENT_DIR, f), 'utf8');
     vm.runInContext(code, box, { filename: f });
