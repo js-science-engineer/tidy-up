@@ -113,7 +113,7 @@ tidy-up(2)/
 
 | 项 | 要求 |
 |---|---|
-| Node.js | **≥ 22.5**（推荐 22 LTS；内置 `node:sqlite` 需要此版本） |
+| Node.js | **≥ 22.13**（推荐 22 LTS；内置 `node:sqlite` 自 22.13 起无需额外标志） |
 | 操作系统 | Windows 10+ / macOS 12+ / Linux |
 | 浏览器 | Chrome / Edge / Safari 等现代浏览器 |
 

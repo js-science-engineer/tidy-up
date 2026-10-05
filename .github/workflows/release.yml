@@ -42,7 +42,13 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22.22.2'   # 必须 >= 22.13：node:sqlite 在 22.13 前需 --experimental-sqlite 标志
+
+      - name: 环境自检（Node 版本 / node:sqlite 可用性）
+        run: |
+          node -v
+          npm -v
+          node -e "require('node:sqlite'); console.log('node:sqlite 可用')"
 
       - name: 网页版 · 安装依赖
         run: npm ci
@@ -74,7 +80,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22.22.2'   # 必须 >= 22.13：node:sqlite 在 22.13 前需 --experimental-sqlite 标志
 
       - name: 安装依赖
         run: npm ci
@@ -138,7 +144,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22.22.2'   # 必须 >= 22.13：node:sqlite 在 22.13 前需 --experimental-sqlite 标志
 
       - name: 安装依赖
         run: npm ci
