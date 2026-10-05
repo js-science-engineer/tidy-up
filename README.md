@@ -100,7 +100,7 @@ tidy-up(2)/
     ├── src/                  main（窗口/托盘/IPC/存储/形象）· preload · renderer · shared · assets
     ├── build/                应用图标（png / ico / @2x）
     ├── tools/                构建、体检、冒烟脚本
-    ├── tests/                单元测试（113 项）
+    ├── tests/                单元测试（117 项）
     ├── pet-assets/           形象处理脚本
     └── docs/                 安装指引 / 发布说明 / 验收报告 / macOS 构建说明 / design/
 ```
@@ -174,7 +174,7 @@ npm run build:mac  # 打 macOS dmg（需在 macOS 上执行）
 npm test                 # 66 项：M1~M8
 
 # 桌面版
-cd desktop && npm test   # 113 项
+cd desktop && npm test   # 117 项
 ```
 
 测试使用 Node 内置 test runner，无需额外依赖。
@@ -225,7 +225,7 @@ cd desktop && npm test   # 113 项
 | 数据 | SQLite（`better-sqlite3` 优先，`node:sqlite` 兜底）/ 云端托管数据库 + RLS | 本地 JSON（原子写 + 自动备份） |
 | AI | 智谱 GLM-4V-Flash（免费）/ 阿里云百炼 Qwen-VL，OpenAI 兼容协议，可切换 | — |
 | 视觉 | 液态玻璃 + 统一蓝靛单色系，深/浅双主题 | 透明置顶窗口 |
-| 测试 | Node 内置 test runner（66 项） | Node 内置 test runner（113 项） |
+| 测试 | Node 内置 test runner（66 项） | Node 内置 test runner（117 项） |
 
 ---
 

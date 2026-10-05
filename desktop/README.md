@@ -35,7 +35,7 @@
 ```bash
 npm install        # 安装依赖
 npm start          # 开发运行
-npm test           # 单元测试（113 项）
+npm test           # 单元测试（117 项）
 npm run smoke      # Electron 冒烟自检（宠物窗口+面板探针）
 npm run build:win  # 打 Windows 安装包+便携版（需配 ELECTRON_MIRROR）
 ```

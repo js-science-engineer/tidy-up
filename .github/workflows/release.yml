@@ -21,6 +21,10 @@ on:
         description: '构建 macOS dmg（未签名，仅手动触发时生效）'
         type: boolean
         default: false
+      mac_version:
+        description: 'macOS 包归属的桌面版版本号（如填 0.1.0 则发到 desktop-v0.1.0；留空则只传工作流附件）'
+        type: string
+        default: ''
 
 # 创建 Release 需要写权限
 permissions:
@@ -145,9 +149,30 @@ jobs:
       - name: 构建 dmg（x64 + arm64）
         run: npm run build:mac
 
-      - name: 上传构建产物（工作流附件，需自行下载后手动发布）
+      - name: 上传构建产物（工作流附件，保底可取）
         uses: actions/upload-artifact@v4
         with:
           name: js-pet-macos-dmg
           path: desktop/dist/*.dmg
           if-no-files-found: error
+
+      # 填了 mac_version 才把 dmg 直接并入对应版本的 Release，
+      # 这样 Windows / macOS 安装包在同一个下载页就能取齐。
+      - name: 发布 dmg 到 Release
+        if: inputs.mac_version != ''
+        working-directory: .
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="desktop-v${{ inputs.mac_version }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" desktop/dist/*.dmg --clobber
+            echo "已追加 dmg 到现有 Release：$TAG"
+          else
+            gh release create "$TAG" \
+              --title "js-pet ${{ inputs.mac_version }}" \
+              --generate-notes \
+              desktop/dist/*.dmg
+            echo "已创建 Release 并上传 dmg：$TAG"
+          fi
