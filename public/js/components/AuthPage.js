@@ -18,15 +18,26 @@
       notice: '',
       countdown: 0,
       _pending: null,          // {email, verificationId, isExistingUser}
+      initErr: '',             // 云端 SDK / 会话初始化失败原因（由 boot.js 写入 window.__cloudInitError）
     }),
+    mounted() {
+      this.initErr = window.__cloudInitError || '';
+    },
     computed: {
       client() { return window.__cloudClient; },
     },
     methods: {
       fail(msg) { this.err = msg || t('auth.fail'); },
+      reloadPage() { location.reload(); },
+      // 云端 SDK 未就绪时给出明确提示，避免"点了没反应"
+      ensureClient() {
+        if (!this.client) { this.fail(t('auth.noClient')); return false; }
+        return true;
+      },
       validEmail() { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email.trim()); },
       async sendCode() {
         this.err = ''; this.notice = '';
+        if (!this.ensureClient()) return;
         if (!this.validEmail()) return this.fail(t('auth.badEmail'));
         this.busy = true;
         try {
@@ -46,6 +57,7 @@
       },
       async passwordLogin() {
         this.err = '';
+        if (!this.ensureClient()) return;
         if (!this.validEmail() || !this.password) return this.fail(t('auth.needEmailPw'));
         this.busy = true;
         try {
@@ -56,6 +68,7 @@
       },
       async otpLogin() {
         this.err = '';
+        if (!this.ensureClient()) return;
         if (!this._pending || this._pending.email !== this.email.trim()) return this.fail(t('auth.needCodeFirst'));
         if (!this.code.trim()) return this.fail(t('auth.needCode'));
         if (!this._pending.isExistingUser) return this.fail(t('auth.notRegistered'));
@@ -73,6 +86,7 @@
       },
       async register() {
         this.err = '';
+        if (!this.ensureClient()) return;
         if (!this.validEmail()) return this.fail(t('auth.badEmail'));
         if (!this._pending || this._pending.email !== this.email.trim()) return this.fail(t('auth.needCodeReg'));
         if (!this.code.trim()) return this.fail(t('auth.needCode'));
@@ -93,6 +107,7 @@
       },
       async doForgot() {
         this.err = '';
+        if (!this.ensureClient()) return;
         if (!this.validEmail()) return this.fail(t('auth.badEmail'));
         this.busy = true;
         try {
@@ -115,6 +130,12 @@
           <div style="font-size:34px">🧊</div>
           <h2 style="margin:6px 0 4px">{{ t('auth.brand') }}</h2>
           <div style="color:var(--text-3);font-size:13px">{{ t('auth.subtitle') }}</div>
+        </div>
+
+        <!-- 云端组件加载失败（如网络无法访问 SDK）：显示原因 + 刷新按钮，避免"点了没反应" -->
+        <div v-if="initErr" style="margin-bottom:14px;padding:10px 12px;border-radius:12px;border:1px solid rgba(252,165,165,.35);background:rgba(252,165,165,.08)">
+          <div style="color:#fca5a5;font-size:12.5px">⚠️ {{ t('auth.loadFail') }}：{{ initErr }}</div>
+          <button class="btn-ghost" style="margin-top:8px" @click="reloadPage">{{ t('auth.refreshPage') }}</button>
         </div>
 
         <div v-if="!forgot" class="seg" style="width:100%;justify-content:center">

@@ -55,8 +55,10 @@
 <!-- 电子宠物：形象图像库 + 挂载器（独立于 Vue，由 app.js 在挂载完成后启动） -->
 <script src="/pet-assets/look-lib.js"></script>
 <script src="/js/components/PetWidget.js"></script>
-<!-- 云端模式：WorkBuddy 云 SDK（CDN，无构建步骤）+ 共享逻辑 + 云适配器 + 启动引导 -->
-<script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
+<!-- 云端模式：WorkBuddy 云 SDK + 共享逻辑 + 云适配器 + 启动引导
+     ⚠️ SDK 必须本地自带（public/assets/workbuddy-cloud-sdk.js）：
+     原先从 cdn.jsdelivr.net 加载，该域名在部分网络无法握手，会导致云端登录整体不可用。 -->
+<script src="/assets/workbuddy-cloud-sdk.js"></script>
 <script src="/js/cloud/tidy-shared.js"></script>
 <script src="/js/cloud/tidy-cloud-api.js"></script>
 <script src="/js/cloud/boot.js"></script>

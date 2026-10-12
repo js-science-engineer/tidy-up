@@ -97,6 +97,9 @@
         alreadyUser: '该邮箱已注册，将直接登录',
         codeSent: '验证码已发送到邮箱，请查收',
         newUserPw: '该邮箱尚未注册，将引导你设置密码',
+        loadFail: '云端组件加载失败，登录功能不可用',
+        noClient: '云端组件未就绪，请刷新页面后重试',
+        refreshPage: '刷新页面',
       },
       footer: {
         product: '实验室物品收纳管理系统',
@@ -195,6 +198,9 @@
         alreadyUser: 'Email already registered — signing you in directly',
         codeSent: 'Verification code sent — please check your inbox',
         newUserPw: 'Email not registered yet — you will be guided to set a password',
+        loadFail: 'Failed to load cloud components — sign-in is unavailable',
+        noClient: 'Cloud components are not ready — please refresh the page and try again',
+        refreshPage: 'Refresh page',
       },
       footer: {
         product: 'Lab Item Storage Management',

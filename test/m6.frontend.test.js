@@ -417,3 +417,33 @@ test('M6.11 电子宠物已接入主站：打开网站自动蹦出、功能完�
   const petVars = petCss.match(/--pet-[a-z-]+/g) || [];
   assert.ok(petVars.length >= 4, '宠物应使用 --pet-* 专属变量而非主站 token');
 });
+
+// ---- M6.12：前端不得依赖外部 CDN（Cloud SDK 必须本地自带） ----
+// 背景：原先云端 SDK 从 cdn.jsdelivr.net 加载，该域名在部分网络无法握手，
+// 会导致云端登录整体不可用、页面看起来「打不开」。SDK 必须随站点一同发布。
+test('M6.12 云端 SDK 本地自带，前端无外部 CDN 依赖', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
+
+  // 1) 不允许任何外部 http(s) 脚本（关键路径必须同源，避免被网络环境屏蔽）
+  const external = [...html.matchAll(/<script[^>]+src="(https?:\/\/[^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(external, [], 'index.html 不应从外部 CDN 加载脚本，发现：' + external.join('，'));
+
+  // 2) 本地 SDK 副本存在且非空
+  const sdkPath = path.join(ROOT, 'public', 'assets', 'workbuddy-cloud-sdk.js');
+  assert.ok(fs.existsSync(sdkPath), '缺少本地 SDK 副本 public/assets/workbuddy-cloud-sdk.js');
+  const sdk = fs.readFileSync(sdkPath, 'utf8');
+  assert.ok(sdk.length > 10000, 'SDK 副本体积异常（疑似下载失败）：' + sdk.length);
+  assert.ok(html.includes('/assets/workbuddy-cloud-sdk.js'), 'index.html 应引用本地 SDK 副本');
+
+  // 3) SDK 能被浏览器脚本正常解析并导出全局 WorkBuddyCloud
+  const box = loadVueGlobal();
+  vm.runInContext(sdk, box, { filename: 'workbuddy-cloud-sdk.js' });
+  assert.equal(typeof box.window.WorkBuddyCloud, 'object', 'SDK 应导出全局 WorkBuddyCloud');
+  assert.equal(typeof box.window.WorkBuddyCloud.createWorkBuddyCloud, 'function',
+    'SDK 应提供 createWorkBuddyCloud');
+
+  // 4) 加载失败时必须可见（不能静默失败让用户「点了没反应」）
+  const auth = fs.readFileSync(path.join(COMPONENT_DIR, 'AuthPage.js'), 'utf8');
+  assert.ok(auth.includes('__cloudInitError'), '登录页应展示 boot.js 写入的加载失败原因');
+  assert.ok(auth.includes('ensureClient'), '登录页应在 SDK 未就绪时给出明确提示');
+});
