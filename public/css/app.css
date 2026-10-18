@@ -119,6 +119,19 @@
 .qty{ display:inline-flex; align-items:center; border-radius:999px; border:1px solid var(--rim-lo); overflow:hidden; background:var(--glass); }
 .qty button{ width:32px; height:32px; border:none; background:var(--glass-2); color:var(--text); font-size:15px; cursor:pointer; }
 .qty span{ width:38px; text-align:center; font-size:13.5px; font-weight:650; }
+/* 数量：双击数字直接键入，不用一直点 ± */
+.qty-num{ width:44px; text-align:center; font-size:13.5px; font-weight:650; cursor:text; user-select:none; }
+.qty-input{ width:56px; height:32px; text-align:center; font-size:13.5px; font-weight:650; border:none;
+  background:transparent; color:var(--text); outline:none; -moz-appearance:textfield; }
+.qty-input::-webkit-outer-spin-button,.qty-input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+
+/* 排序按钮：区域 / 柜子 / 层 / 箱 的上下移动 */
+.ord{ display:inline-flex; gap:4px; }
+.ord-btn{ width:26px; height:26px; padding:0; border-radius:8px; border:1px solid var(--rim-lo);
+  background:var(--glass-2); color:var(--text-2); font-size:10px; line-height:1; cursor:pointer; transition:all .18s; }
+.ord-btn:hover:not(:disabled){ border-color:var(--rim-hi); color:var(--text); }
+.ord-btn:disabled{ opacity:.25; cursor:not-allowed; }
+.cab-ord{ display:flex; gap:4px; justify-content:flex-end; margin:-4px 0 8px; }
 .img-pick{ display:flex; gap:9px; }
 .img-pick .ph{ width:52px; height:52px; border-radius:13px; display:flex; align-items:center; justify-content:center; font-size:20px;
   background:var(--glass); border:1px solid var(--rim-lo); cursor:pointer; transition:all .2s; overflow:hidden; }
@@ -334,3 +347,156 @@ body.light .cab-mini.drop-hover{ box-shadow:var(--shadow-sm), 0 0 0 3px rgba(99,
   .drag-hint{ padding:9px 14px; font-size:12px; }
 }
 @media (max-width:400px){ .clock{ display:none; } }
+
+/* ---------- 移动端性能：针对手机发烫 / 卡顿 ---------- */
+/* 根因（v2.4 复盘）：
+   ① 页面里有几十个 backdrop-filter 玻璃卡片（顶栏/侧栏还是 sticky/fixed，尺寸一直压在滚动内容上）；
+   ② 背后还有 3 个 110px 高斯模糊的大光斑在无限漂移（animation:drift）。
+   两者叠加意味着 GPU 每一帧都要把"正在变化的模糊背景"重新采样一遍，帧率掉到 30 以下，机器持续发热。
+   → 做法：由 app.js 在手机 / 触屏 / 低端设备上给 body 加 .perf-lite，
+     关掉 backdrop-filter 与光斑动画，改用高不透明度"实心玻璃"；桌面上视觉效果完全不变。 */
+body.perf-lite .glass,
+body.perf-lite .liquid,
+body.perf-lite .btn-ghost,
+body.perf-lite .modal-mask,
+body.perf-lite .nav-btn .tip,
+body.perf-lite .drop{
+  backdrop-filter:none !important; -webkit-backdrop-filter:none !important;
+}
+body.perf-lite .glass, body.perf-lite .liquid{ background:var(--glass-solid); }
+body.perf-lite .glass::before{ display:none; }        /* 边缘渐变伪元素省掉一层合成 */
+/* 背景光斑：桌面上是 3 个 110px 高斯模糊 + 缓慢漂移的大图层，观感很高级；
+   但它们同时是 position:fixed + filter:blur，滚动时整个固定层都要重新合成。
+   实测（390×844 / DPR3 / CPU 4x 降速）滚动帧率：
+     带光斑 44.6fps  →  仅隐藏光斑 60.4fps  →  再隐藏宠物/阴影/图片 仍是 60.4fps
+   即手机滚动卡顿几乎全部来自这 3 个模糊层，与宠物、图片无关。
+   性能模式下改用「一次画好」的径向渐变（颜色分布一致，零 filter、零合成层、不随滚动重绘）。 */
+body.perf-lite .blob{ display:none !important; }
+body.perf-lite{
+  background:
+    radial-gradient(58% 44% at 6% 4%,   var(--blob-1), transparent 70%),
+    radial-gradient(52% 40% at 94% 12%, var(--blob-2), transparent 70%),
+    radial-gradient(66% 48% at 48% 98%, var(--blob-3), transparent 72%),
+    linear-gradient(135deg, var(--bg-1) 0%, var(--bg-2) 50%, var(--bg-3) 100%);
+  background-attachment: scroll;        /* 关键：不用 fixed，iOS 滚动时不必每帧重绘背景 */
+}
+body.perf-lite::after{ display:none; }                /* 全屏噪点贴图：固定层，滚动时一直在合成 */
+body.perf-lite .lift:hover{ transform:none; box-shadow:var(--shadow-sm); }  /* 触屏没有 hover，别做无用功 */
+body.perf-lite .screen{ animation:none; }
+body.perf-lite .spinner{ animation-duration:1.2s; }
+/* 长列表：屏幕外的区域先不渲染，滚动更跟手 */
+body.perf-lite .zone{ content-visibility:auto; contain-intrinsic-size:auto 360px; }
+/* 触屏细节：去掉点击高亮与 300ms 双击缩放等待 */
+@media (pointer:coarse){
+  body{ -webkit-tap-highlight-color:transparent; }
+  .screen, .item-card, .item-chip, .cab-mini, .btn-main, .btn-ghost, .nav-btn{ touch-action:manipulation; }
+  .thumb-zoom{ opacity:.92; }
+}
+/* 页面切到后台（锁屏 / 切 App）时暂停所有 CSS 动画，避免空转耗电。
+   由 app.js 在 visibilitychange 时切换 body.page-hidden。 */
+body.page-hidden *,
+body.page-hidden *::before,
+body.page-hidden *::after{ animation-play-state:paused !important; }
+/* 系统开启「减少动态效果」时，直接关掉装饰性动画 */
+@media (prefers-reduced-motion:reduce){
+  .screen, .modal-mask, .toast, .ai-hint{ animation:none !important; }
+  .blob{ animation:none !important; }
+}
+
+/* ---------- v2.4 总览实物照片放大 ---------- */
+.item-thumb.zoomable{ position:relative; cursor:zoom-in; }
+.item-thumb.no-photo{ cursor:default; }
+.item-thumb img{ transition:transform .25s cubic-bezier(.2,.8,.3,1); }
+.item-card:hover .item-thumb.zoomable img{ transform:scale(1.04); }
+.thumb-zoom{ position:absolute; right:6px; bottom:6px; width:22px; height:22px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:11px; color:#fff;
+  background:rgba(4,8,20,.52); opacity:0; transition:opacity .2s; pointer-events:none; }
+.item-card:hover .thumb-zoom{ opacity:1; }
+.chip-img{ cursor:zoom-in; }
+.chip-img:hover{ box-shadow:0 0 0 2px rgba(129,140,248,.55); }
+
+.photo-viewer{ position:fixed; inset:0; z-index:120; background:rgba(3,6,16,.93);
+  display:flex; flex-direction:column; gap:10px;
+  padding:14px max(14px, env(safe-area-inset-left)) calc(14px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-right));
+  animation:pvIn .16s ease-out; }
+@keyframes pvIn{ from{ opacity:0; } to{ opacity:1; } }
+.pv-bar{ display:flex; align-items:center; gap:12px; color:#fff; flex-wrap:wrap; }
+.pv-title{ flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.pv-title b{ font-size:15px; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pv-sub{ font-size:11.5px; color:rgba(255,255,255,.58); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pv-acts{ display:flex; align-items:center; gap:8px; }
+.pv-btn{ border:1px solid rgba(255,255,255,.24); background:rgba(255,255,255,.10); color:#fff;
+  font-size:12.5px; font-family:inherit; padding:8px 13px; border-radius:999px; cursor:pointer;
+  text-decoration:none; white-space:nowrap; line-height:1; }
+.pv-btn:hover{ background:rgba(255,255,255,.2); }
+.pv-x{ padding:8px 12px; }
+.pv-stage{ flex:1; min-height:0; display:flex; align-items:center; justify-content:center; overflow:hidden; cursor:zoom-in; }
+.pv-stage img{ max-width:100%; max-height:100%; object-fit:contain; border-radius:10px; display:block;
+  transition:transform .22s cubic-bezier(.2,.8,.3,1); will-change:transform; }
+.pv-stage img.zoomed{ transform:scale(2.4); cursor:zoom-out; }
+.pv-tip{ text-align:center; color:rgba(255,255,255,.5); font-size:11.5px; }
+body.photo-open{ overflow:hidden; }
+@media (max-width:640px){
+  .pv-tip{ font-size:11px; }
+  .pv-stage img.zoomed{ transform:scale(2.8); }
+}
+
+/* ---------- v2.4 入库名称查重 / 合并 ---------- */
+.dup-hint{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:-2px 0 9px;
+  padding:8px 11px; border-radius:12px; font-size:12px; color:var(--text-2);
+  background:rgba(250,204,21,.10); border:1px solid rgba(250,204,21,.34); }
+body.light .dup-hint{ background:rgba(234,179,8,.13); border-color:rgba(202,138,4,.34); }
+.dup-hint .dup-ic{ font-size:13px; }
+.dup-hint .dup-txt{ flex:1; min-width:0; }
+.dup-hint b{ color:var(--text); font-weight:650; }
+.dup-btn{ padding:5px 12px; font-size:11.5px; }
+.dup-lead{ font-size:13px; line-height:1.75; color:var(--text-2); margin-bottom:14px; }
+.dup-lead b{ color:var(--text); }
+.dup-card{ padding:11px 14px; border-radius:13px; background:var(--glass-2); border:1px solid var(--rim-lo); margin-bottom:12px; }
+.dup-card-name{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-weight:650; font-size:13.5px; }
+.dup-locs{ display:flex; flex-direction:column; gap:7px; }
+.dup-locs-title{ font-size:12.5px; color:var(--text-2); margin-bottom:2px; }
+.dup-loc{ display:flex; align-items:center; gap:10px; padding:10px 13px; border-radius:12px; cursor:pointer;
+  background:var(--glass); border:1px solid var(--rim-lo); font-size:12.5px; color:var(--text-2); }
+.dup-loc:hover{ border-color:var(--rim-hi); }
+.dup-loc input{ width:16px; height:16px; flex:none; accent-color:var(--a2); }
+.dup-loc .grow{ flex:1; display:flex; flex-direction:column; gap:2px; min-width:0; }
+.dup-loc .grow b{ font-weight:600; color:var(--text); }
+.dup-loc .grow .muted{ color:var(--text-3); font-size:11.5px; }
+
+/* ---------- v2.7 切模块不白屏：骨架屏 + 顶部进度条 ---------- */
+/* 骨架屏：数据没到之前先把版式画出来。只动 transform/opacity，手机上也不吃 GPU。 */
+.page-skeleton{ display:flex; flex-direction:column; gap:16px; margin-top:6px; }
+.sk-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+.sk-card{ padding:16px; border-radius:18px; background:var(--glass); border:1px solid var(--rim-lo);
+  display:flex; flex-direction:column; gap:10px; }
+.sk-line{ height:11px; border-radius:6px; background:linear-gradient(90deg,var(--glass-2),var(--rim-lo),var(--glass-2));
+  background-size:200% 100%; animation:skShimmer 1.15s linear infinite; }
+.sk-line.w40{ width:40%; height:16px; }
+.sk-line.w60{ width:62%; }
+.sk-chart{ height:150px; border-radius:18px; background:var(--glass); border:1px solid var(--rim-lo);
+  display:flex; align-items:flex-end; padding:16px; }
+.sk-bars{ display:flex; align-items:flex-end; gap:10px; width:100%; height:100%; }
+.sk-bars i{ flex:1; border-radius:6px 6px 3px 3px; background:linear-gradient(180deg,var(--glass-2),var(--rim-lo));
+  animation:skShimmer 1.3s linear infinite; }
+@keyframes skShimmer{ from{ background-position:200% 0; } to{ background-position:-200% 0; } }
+.sk-hint{ text-align:center; color:var(--text-3); font-size:12px; }
+@media (max-width:860px){
+  .sk-grid{ grid-template-columns:repeat(2,1fr); }
+  .sk-chart{ height:120px; }
+}
+body.perf-lite .sk-line, body.perf-lite .sk-bars i{ animation-duration:1.8s; }
+
+/* 顶部进度条：有请求在飞时显示（>160ms 才出现，本地不闪） */
+.route-progress{ position:fixed; left:0; right:0; top:0; height:2.5px; z-index:130; overflow:hidden;
+  background:rgba(129,140,248,.16); pointer-events:none; }
+.route-progress i{ display:block; height:100%; width:38%; border-radius:2px;
+  background:linear-gradient(90deg,transparent,var(--a1),var(--a2),transparent);
+  animation:routeRun 1.05s cubic-bezier(.45,.05,.55,.95) infinite; }
+@keyframes routeRun{ from{ transform:translateX(-100%); } to{ transform:translateX(340%); } }
+/* 详情弹层加载态 */
+.detail-loading{ display:flex; flex-direction:column; align-items:center; gap:12px; padding:34px 24px; }
+@media (prefers-reduced-motion:reduce){
+  .route-progress i{ animation-duration:2s; }
+  .sk-line, .sk-bars i{ animation:none; }
+}

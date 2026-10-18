@@ -161,7 +161,7 @@ test('M6.6 总览拖拽物品移位：可拖到「别的柜子」或「指定层
   // ⑤ 方法齐备（层 + 柜 + 统一移位）
   for (const m of ['onDragStart', 'onDragEnd', 'onShelfOver', 'onShelfLeave', 'onShelfDrop',
     'onCabOver', 'onCabLeave', 'onCabDrop', 'doMove', 'cabTargetShelf', 'shelfQty',
-    'shownItems', 'isExpanded', 'toggleExpand']) {
+    'shownItems', 'isCollapsed', 'toggleCollapse']) {
     assert.equal(typeof dash.methods[m], 'function', '缺少拖拽方法 ' + m);
   }
   assert.equal(typeof dash.computed.dragging, 'function', '应有 dragging 计算属性');
@@ -177,9 +177,13 @@ test('M6.6 总览拖拽物品移位：可拖到「别的柜子」或「指定层
   assert.ok(src.includes('fromShelf'), '整柜投放应排除原层');
   assert.ok(src.includes('sort((a, b) => this.shelfQty(a) - this.shelfQty(b))'), '整柜投放应选最空的一层');
 
-  // ⑧ 大于 4 项时能展开全部（否则被折叠的物品无法拖动）
+  // ⑧ 默认完整显示每层全部物品（v2.3 修复"只显示部分物品"），需要时仍可折叠
   assert.ok(tpl.includes('shownItems(s)'), '物品列表应支持展开/收起');
-  assert.ok(tpl.includes('toggleExpand(s.id)'), '+N 应可展开全部物品');
+  assert.ok(tpl.includes('toggleCollapse(s.id)'), '收起/展开应可点');
+  assert.ok(tpl.includes('s.items.length > 4'), '超过 4 项时应提供收起/展开入口');
+  const srcDash = src;
+  assert.ok(/collapsed\s*:\s*\[\]/.test(srcDash), '默认应为"全部展开"（collapsed 初始为空）');
+  assert.ok(srcDash.includes(': s.items;'), '未折叠时必须返回全部物品，不得再截断');
 });
 
 // ---- M6.7：模板标识符必须真实可解析（v1.4 真实缺陷回归） ----
@@ -267,22 +271,25 @@ test('M6.7 模板里用到的每个标识符都必须真实可解析（防整页
     '以下标识符在模板中使用，但既不是组件属性也未注入 globalProperties（浏览器渲染时会取到 undefined）：\n' + problems.join('\n'));
 });
 
-// ---- v1.5：六个主要模块的顺序由用户决定 ----
-test('M6.8 六个主要模块顺序可自定义（拖拽 + ▲▼ + 持久化）', () => {
+// ---- v1.5：主要模块的顺序由用户决定（v2.2 起新增"实验室"共享空间模块） ----
+test('M6.8 主要模块顺序可自定义（拖拽 + ▲▼ + 持久化）', () => {
   const box = loadVueGlobal();
   loadComponents(box);
 
   const mods = box.window.NAV_MODULES;
   assert.ok(Array.isArray(mods), '应导出 NAV_MODULES 模块清单');
-  assert.equal(mods.length, 6, '应有 6 个主要模块，实际 ' + mods.length);
+  assert.equal(mods.length, 7, '应有 7 个主要模块（含实验室），实际 ' + mods.length);
   const keys = mods.map((m) => m.key);
-  for (const k of ['dashboard', 'studio', 'scan', 'search', 'stats', 'settings']) {
+  for (const k of ['dashboard', 'studio', 'scan', 'search', 'lab', 'stats', 'settings']) {
     assert.ok(keys.includes(k), '模块清单缺少 ' + k);
   }
   for (const m of mods) {
     assert.ok(m.icon && m.label, m.key + ' 应有图标与名称');
     assert.ok(/^#\//.test(m.hash), m.key + ' 应有独立 hash（避免互相抢首页）');
   }
+  // 实验室共享空间依赖账号体系：仅云端模式出现，本地单机模式不显示
+  const labMod = mods.find((m) => m.key === 'lab');
+  assert.equal(labMod.cloudOnly, true, '实验室模块应标记为 cloudOnly');
   // 顺序相关能力必须导出
   assert.equal(typeof box.window.loadNavOrder, 'function', '应能读取用户顺序');
   assert.equal(typeof box.window.saveNavOrder, 'function', '应能保存用户顺序');

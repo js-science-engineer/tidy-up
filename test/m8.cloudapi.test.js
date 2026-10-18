@@ -18,7 +18,7 @@ function mockClient(initial) {
         try {
           if (op.type === 'select') {
             let out = rows.filter((r) => b.filters.every((f) =>
-              f.is ? r[f.col] === null : Number(r[f.col]) === Number(f.val) || r[f.col] === f.val));
+              f.is ? (r[f.col] === null || r[f.col] === undefined) : Number(r[f.col]) === Number(f.val) || r[f.col] === f.val));
             if (b.orders.length) {
               out = [...out].sort((x, y) => {
                 for (const o of b.orders) {
@@ -45,7 +45,7 @@ function mockClient(initial) {
           }
           if (op.type === 'update') {
             for (const r of rows) {
-              if (b.filters.every((f) => (f.is ? r[f.col] === null : r[f.col] === f.val))) {
+              if (b.filters.every((f) => (f.is ? (r[f.col] === null || r[f.col] === undefined) : r[f.col] === f.val))) {
                 if (op.payload.owner_id !== undefined) throw new Error('RLS 违规：客户端发送了 owner_id');
                 Object.assign(r, op.payload);
               }
@@ -54,8 +54,8 @@ function mockClient(initial) {
             return resolve({ data: null, error: null });
           }
           if (op.type === 'delete') {
-            const keep = rows.filter((r) => !b.filters.every((f) => (f.is ? r[f.col] === null : r[f.col] === f.val)));
-            rows.filter((r) => b.filters.every((f) => (f.is ? r[f.col] === null : r[f.col] === f.val)))
+            const keep = rows.filter((r) => !b.filters.every((f) => (f.is ? (r[f.col] === null || r[f.col] === undefined) : r[f.col] === f.val)));
+            rows.filter((r) => b.filters.every((f) => (f.is ? (r[f.col] === null || r[f.col] === undefined) : r[f.col] === f.val)))
               .forEach((r) => calls.deletes.push({ table: name, row: r }));
             rows.length = 0;
             rows.push(...keep);

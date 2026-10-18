@@ -15,8 +15,12 @@ const db = initDb();
 const app = express();
 app.use(express.json({ limit: '6mb' }));
 
-// 物品图片静态服务
-app.use('/images', express.static(IMAGES_DIR));
+// 物品图片：带 ?w= 时按需生成缩略图（列表里几十张小图不再按原图解码），否则原图静态托管
+app.use('/images', require('./thumb').serveThumb, express.static(IMAGES_DIR, {
+  // 图片文件名带时间戳、内容不会原地变 → 允许长缓存，手机二次打开不用重新下载
+  maxAge: '30d',
+  immutable: true,
+}));
 // 前端静态
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
@@ -41,6 +45,25 @@ const upload = multer({
 const api = express.Router();
 api.use((req, res, next) => { req.db = db; next(); });
 
+// 云配置（发布时生成；本地开发无此文件）
+function readCloudConfig() {
+  try {
+    const cc = JSON.parse(fs.readFileSync(path.join(__dirname, 'cloud-config.json'), 'utf8'));
+    if (cc.endpoint && cc.publishableKey) return { endpoint: cc.endpoint, publishableKey: cc.publishableKey };
+  } catch { /* 无配置文件则视为本地模式 */ }
+  return null;
+}
+
+// 请求是否来自云端公网域名（反向代理转发而来）
+function isCloudHost(req, endpoint) {
+  const raw = req.headers['x-forwarded-host'] || req.headers.host || '';
+  const host = String(raw).split(',')[0].trim().toLowerCase().replace(/:\d+$/, '');
+  if (!host) return false;
+  let ep = '';
+  try { ep = new URL(endpoint).hostname.toLowerCase(); } catch { return false; }
+  return !!ep && host === ep;
+}
+
 api.get('/system/info', (req, res) => {
   const nets = os.networkInterfaces();
   const urls = [];
@@ -49,15 +72,12 @@ api.get('/system/info', (req, res) => {
       if (n.family === 'IPv4' && !n.internal) urls.push(`http://${n.address}:${cfg.load().port}`);
     }
   }
-  // 云模式标记：TIDY_CLOUD=1 且存在 server/cloud-config.json（部署时生成，本地开发无此文件）
-  let cloud = false;
-  if (process.env.TIDY_CLOUD === '1') {
-    try {
-      const cc = JSON.parse(fs.readFileSync(path.join(__dirname, 'cloud-config.json'), 'utf8'));
-      if (cc.endpoint && cc.publishableKey) cloud = { endpoint: cc.endpoint, publishableKey: cc.publishableKey };
-    } catch { /* 未配置则视为本地模式 */ }
-  }
-  res.json({ ok: true, data: { port: cfg.load().port, lanUrls: urls, version: '0.7.0', engine: db.engine, cloud } });
+  // 云模式判定：存在 cloud-config.json，且（显式 TIDY_CLOUD=1 或当前请求域名与配置的 endpoint 同域）。
+  // 加同域兜底是为了不依赖环境变量——重新发布时启动命令被重探会静默丢掉 TIDY_CLOUD，
+  // 那样线上会无声退回本地单机模式（看不到登录页与实验室共享空间）。
+  const cc = readCloudConfig();
+  const cloud = (cc && (process.env.TIDY_CLOUD === '1' || isCloudHost(req, cc.endpoint))) ? cc : false;
+  res.json({ ok: true, data: { port: cfg.load().port, lanUrls: urls, version: '0.9.0', engine: db.engine, cloud } });
 });
 
 api.use(require('./routes/items'));

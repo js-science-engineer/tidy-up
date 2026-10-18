@@ -40,6 +40,51 @@ const DOORS = ['double', 'single', 'drawer'];
 // 整棵树
 router.get('/structure', (req, res) => ok(res, lib.getTree(req.db)));
 
+// ---- 排序：区域 / 柜子 / 层 / 箱 都可以手动调整顺序 ----
+// 入参 { ent, ids: [按目标顺序排列的同级 id] }。只接受同一父级下的 id，防止跨区乱序。
+function siblingIds(db, ent, parentId) {
+  const e = ENT[ent];
+  if (!e) return [];
+  const rows = e.parent
+    ? db.prepare(`SELECT id FROM ${e.table} WHERE ${e.parent}=? ORDER BY sort, id`).all(parentId)
+    : db.prepare(`SELECT id FROM ${e.table} ORDER BY sort, id`).all();
+  return rows.map((r) => Number(r.id));
+}
+
+router.post('/structure/reorder', wrap(async (req, res) => {
+  const db = req.db;
+  const b = req.body || {};
+  const ent = ENT[b.ent];
+  if (!ent) throw new ApiError(400, '未知实体类型');
+  const ids = Array.isArray(b.ids) ? b.ids.map(Number).filter((n) => Number.isFinite(n)) : [];
+  if (!ids.length) throw new ApiError(400, 'ids 不能为空');
+
+  // 校验：全部存在、且属于同一父级
+  const rows = ids.map((id) => lib.mustExist(db, ent.table, id, ent.label));
+  if (ent.parent) {
+    const p = rows[0][ent.parent];
+    if (rows.some((r) => Number(r[ent.parent]) !== Number(p))) throw new ApiError(400, '只能在同一上级内排序');
+  }
+  if (new Set(ids).size !== ids.length) throw new ApiError(400, 'ids 中有重复项');
+
+  const setSort = db.prepare(`UPDATE ${ent.table} SET sort=? WHERE id=?`);
+  ids.forEach((id, i) => setSort.run(i + 1, id));
+  lib.addLog(db, { action: 'structure', detail: `调整${ent.label}顺序` });
+  ok(res, { tree: lib.getTree(db) });
+}));
+
+// 把某条记录的 sort 挪到同级第 index 位（0 基），供"新建时指定顺序"用
+function placeAt(db, ent, id, index) {
+  const row = db.prepare(`SELECT * FROM ${ent.table} WHERE id=?`).get(id);
+  if (!row) return;
+  const sibs = siblingIds(db, Object.keys(ENT).find((k) => ENT[k] === ent), ent.parent ? row[ent.parent] : null)
+    .filter((x) => x !== Number(id));
+  const at = Math.max(0, Math.min(sibs.length, Number(index) || 0));
+  sibs.splice(at, 0, Number(id));
+  const setSort = db.prepare(`UPDATE ${ent.table} SET sort=? WHERE id=?`);
+  sibs.forEach((sid, i) => setSort.run(i + 1, sid));
+}
+
 // AI 对话生成（预览，不入库）
 router.post('/structure/generate', wrap(async (req, res) => {
   const text = String(req.body.text || '').trim();
@@ -97,6 +142,7 @@ router.post('/cabinets/:id/photo', upload.single('image'), wrap(async (req, res)
   }
   const old = cab.photo;
   const rel = `images/cabinet-${cab.id}/${name}`;
+  require('../thumb').warm(rel, [320, 640]).catch(() => {});
   db.prepare('UPDATE cabinets SET photo=? WHERE id=?').run(rel, cab.id);
   if (old && old !== rel) removePhotoFile(old);   // 换新照片时清掉旧文件
   lib.addLog(db, { action: 'structure', location: cab.name, detail: '更新柜子实拍照片' });
@@ -144,6 +190,8 @@ router.post('/:ent', wrap(async (req, res) => {
     .run(parentId, name, b.kind === 'drawer' ? 'drawer' : 'shelf', sort);
   else info = db.prepare('INSERT INTO boxes(shelf_id,name,color,sort) VALUES (?,?,?,?)')
     .run(parentId, name, b.color || null, sort);
+  // 新建时可直接指定顺序：index 为同级中的位置（0 基），不传则排在末尾
+  if (b.index !== undefined && b.index !== null && b.index !== '') placeAt(db, ent, info.lastInsertRowid, b.index);
   lib.addLog(db, { action: 'structure', location: name, detail: `新建${ent.label}` });
   ok(res, { id: info.lastInsertRowid, tree: lib.getTree(db) });
 }));

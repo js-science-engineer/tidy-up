@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TidyLab 电子宠物 · 3D 形象 Demo v2（预览版）</title>
+<style>
+  :root{
+    --glass: rgba(255,255,255,.06); --glass2: rgba(255,255,255,.10);
+    --rim: rgba(255,255,255,.14); --text: #ECEFF7; --text2: #A7ADC2; --a1: #6D8DFF;
+  }
+  body.light{
+    --glass: rgba(255,255,255,.66); --glass2: rgba(255,255,255,.85);
+    --rim: rgba(19,27,46,.12); --text: #1B2440; --text2: #5A6480; --a1: #3E63E8;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{
+    font-family: "PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    background:#0D1220; color:var(--text); min-height:100vh; padding:28px 26px 150px;
+    transition: background .3s;
+  }
+  body.light{ background:#E8ECF6; }
+  body.light::before{ content:""; position:fixed; inset:0; background:radial-gradient(900px 500px at 80% -10%, #ffffff, transparent); pointer-events:none; }
+  h1{ font-size:22px; margin-bottom:6px; }
+  .sub{ color:var(--text2); font-size:13.5px; margin-bottom:20px; }
+  .panel{ background:var(--glass); border:1px solid var(--rim); border-radius:18px; padding:16px 18px; margin-bottom:16px; backdrop-filter: blur(14px); }
+  .panel h2{ font-size:14.5px; margin-bottom:10px; }
+  .acts{ display:grid; grid-template-columns:repeat(auto-fill,minmax(104px,1fr)); gap:9px; }
+  .acts button{
+    padding:10px 8px; border-radius:12px; border:1px solid var(--rim); background:var(--glass2);
+    color:var(--text); font-size:13px; cursor:pointer; transition:all .16s;
+  }
+  .acts button:hover{ border-color:var(--a1); transform:translateY(-1px); }
+  .acts button:active{ transform:scale(.96); }
+  .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--text2); }
+  .chip{ padding:7px 14px; border-radius:999px; border:1px solid var(--rim); background:var(--glass2); cursor:pointer; font-size:12.5px; color:var(--text); }
+  .chip:hover{ border-color:var(--a1); }
+  input[type=range]{ accent-color:var(--a1); }
+  .filler p{ color:var(--text2); font-size:13px; line-height:2; margin-bottom:10px; }
+  .note{ font-size:12.5px; color:var(--text2); line-height:1.9; }
+  .note b{ color:var(--text); }
+
+  /* =================== 电子宠物（3D 圆滚滚） =================== */
+  .pet-layer{ position:fixed; right:22px; bottom:18px; z-index:9999; pointer-events:none; }
+  .pet{
+    width:var(--pet-size, 150px); pointer-events:auto; cursor:pointer; user-select:none;
+    transition: width .25s;
+  }
+  .pet svg{ display:block; width:100%; height:auto; overflow:visible; }
+  .pet svg g{ transform-box: view-box; }
+
+  /* —— 落地软阴影（随动作缩放，强化 3D 立体感） —— */
+  #petShadow{ transform-origin:100px 206px; }
+
+  /* —— 待机：圆润呼吸 —— */
+  #petAll{ transform-origin:100px 200px; animation: breathe 3s ease-in-out infinite alternate; }
+  @keyframes breathe{ from{ transform:scale(1,1); } to{ transform:scale(1.012,1.028); } }
+
+  /* 手臂（短粗下垂）待机微摆 */
+  #armL{ transform-origin:44px 128px; animation: idleArmL 3.6s ease-in-out infinite alternate; }
+  #armR{ transform-origin:156px 128px; animation: idleArmR 3.6s ease-in-out infinite alternate; }
+  @keyframes idleArmL{ from{ transform:rotate(1.5deg); } to{ transform:rotate(-3deg); } }
+  @keyframes idleArmR{ from{ transform:rotate(-1.5deg); } to{ transform:rotate(3deg); } }
+
+  /* 眼睛：随机眨眼（整体压扁） */
+  #eyes{ transform-origin:100px 76px; }
+  .blink #eyes{ animation: blink .34s ease-in-out; }
+  @keyframes blink{ 0%,100%{ transform:scaleY(1);} 45%{ transform:scaleY(.08);} }
+
+  /* 眼珠移动 */
+  #pupils{ transition: transform .3s; }
+
+  /* Zzz */
+  #zzz{ opacity:0; }
+  .sleep #zzz{ opacity:1; }
+  .sleep #eyes{ transform:scaleY(.1); transition: transform .3s; }
+  #zzz text{ font:bold 17px "Comic Sans MS",system-ui; fill:#9fb7ff; opacity:.9; }
+  .sleep #zzz text{ animation: zfloat 2s ease-in-out infinite; }
+  #zzz text:nth-child(2){ animation-delay:.55s !important; font-size:14px; }
+  #zzz text:nth-child(3){ animation-delay:1.1s !important; font-size:11px; }
+  @keyframes zfloat{ 0%{ transform:translate(0,6px); opacity:0;} 30%{opacity:.95;} 100%{ transform:translate(9px,-16px); opacity:0;} }
+
+  /* —— 动作关键帧 —— */
+  /* 打招呼：右手举起摆 */
+  .wave #armR{ animation: waveR .5s ease-in-out 5 alternate; }
+  @keyframes waveR{ from{ transform:rotate(-125deg);} to{ transform:rotate(-85deg);} }
+  .wave #armL{ animation:none; }
+  .wave #petAll{ animation: waveLean 2.6s ease-in-out infinite alternate; }
+  @keyframes waveLean{ from{ transform:rotate(0);} to{ transform:rotate(4deg);} }
+
+  /* 兴奋：双臂快摆（参考视频1/6） */
+  .excited #armL{ animation: excL .22s ease-in-out 12 alternate; }
+  .excited #armR{ animation: excR .22s ease-in-out 12 alternate; }
+  @keyframes excL{ from{ transform:rotate(-150deg);} to{ transform:rotate(-100deg);} }
+  @keyframes excR{ from{ transform:rotate(150deg);} to{ transform:rotate(100deg);} }
+  .excited #petAll{ animation: excBounce .44s ease-in-out 6; }
+  @keyframes excBounce{ 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-10px) scale(1.03,.97);} }
+
+  /* 摇摆舞（参考视频5 大幅扭动） */
+  .dance #petAll{ animation: danceSway .5s ease-in-out 8 alternate; }
+  @keyframes danceSway{ from{ transform:rotate(-9deg) translateY(0);} 50%{ transform:rotate(0) translateY(-6px);} to{ transform:rotate(9deg) translateY(0);} }
+  .dance #armL{ animation: danceL .5s ease-in-out 8 alternate; }
+  .dance #armR{ animation: danceR .5s ease-in-out 8 alternate; }
+  @keyframes danceL{ from{ transform:rotate(-115deg);} to{ transform:rotate(-45deg);} }
+  @keyframes danceR{ from{ transform:rotate(115deg);} to{ transform:rotate(45deg);} }
+
+  /* 小跳：下蹲-起跳-落地（squash & stretch） */
+  .jump #petAll{ animation: jumpUp 1s cubic-bezier(.3,0,.4,1); }
+  @keyframes jumpUp{
+    0%{ transform:translateY(0) scale(1,1); }
+    18%{ transform:translateY(6px) scale(1.08,.9); }   /* 下蹲压扁 */
+    45%{ transform:translateY(-34px) scale(.94,1.1); } /* 腾空拉长 */
+    70%{ transform:translateY(0) scale(1.06,.92); }    /* 落地压扁 */
+    86%{ transform:translateY(-6px) scale(.99,1.02); } /* 回弹 */
+    100%{ transform:translateY(0) scale(1,1); }
+  }
+  .jump #petShadow{ animation: shadowJump 1s cubic-bezier(.3,0,.4,1); }
+  @keyframes shadowJump{ 0%,100%{ transform:scale(1); opacity:1;} 45%{ transform:scale(.72); opacity:.55;} }
+
+  /* 左右张望（眼珠先动，身体跟上） */
+  .look #pupils{ animation: lookPupils 1.8s ease-in-out; }
+  @keyframes lookPupils{ 0%{transform:translateX(0);} 25%{transform:translateX(-7px);} 50%{transform:translateX(7px);} 75%{transform:translateX(-3px);} 100%{transform:translateX(0);} }
+  .look #petAll{ animation: lookBody 1.8s ease-in-out; }
+  @keyframes lookBody{ 0%{transform:rotate(0);} 25%{transform:rotate(-5deg);} 50%{transform:rotate(5deg);} 75%{transform:rotate(-2deg);} 100%{transform:rotate(0);} }
+
+  /* 转身（转过去露屁股再转回来） */
+  .turn #petAll{ animation: turnAround 1.6s ease-in-out; }
+  @keyframes turnAround{ 0%{ transform:rotateY(0);} 45%{ transform:rotateY(90deg) scale(1.04,.98);} 55%{ transform:rotateY(90deg) scale(1.04,.98);} 100%{ transform:rotateY(0);} }
+  .turn #face{ animation: faceHide 1.6s ease-in-out; }
+  @keyframes faceHide{ 0%,38%,62%,100%{ opacity:1;} 46%,54%{ opacity:0;} }
+
+  /* 打盹 */
+  .sleep #petAll{ animation: sleepSway 3.4s ease-in-out infinite alternate; }
+  @keyframes sleepSway{ from{ transform:rotate(-2.5deg) scale(1.02,.98);} to{ transform:rotate(2.5deg) scale(1.02,.98);} }
+  .sleep #armL,.sleep #armR{ animation:none; }
+
+  /* 屁股扭扭（羞涩/得意） */
+  .wiggle #petAll{ animation: wiggleIt .38s ease-in-out 7 alternate; }
+  @keyframes wiggleIt{ from{ transform:rotate(-6deg) translateX(-3px);} to{ transform:rotate(6deg) translateX(3px);} }
+  .wiggle #armL{ animation: wigArmL .38s ease-in-out 7 alternate; }
+  .wiggle #armR{ animation: wigArmR .38s ease-in-out 7 alternate; }
+  @keyframes wigArmL{ from{ transform:rotate(-30deg);} to{ transform:rotate(-70deg);} }
+  @keyframes wigArmR{ from{ transform:rotate(30deg);} to{ transform:rotate(70deg);} }
+
+  /* 惊讶：瞪大眼 + 后仰 */
+  .surprise #eyes{ animation: eyesBig 1.2s ease-in-out; transform-origin:100px 76px; }
+  @keyframes eyesBig{ 0%{ transform:scale(1);} 25%{ transform:scale(1.22);} 70%{ transform:scale(1.22);} 100%{ transform:scale(1);} }
+  .surprise #petAll{ animation: leanBack 1.2s ease-in-out; }
+  @keyframes leanBack{ 0%{ transform:rotate(0);} 25%{ transform:rotate(-7deg) translateY(-4px);} 70%{ transform:rotate(-7deg) translateY(-4px);} 100%{ transform:rotate(0);} }
+
+  /* 散步（原地小碎步摇摆） */
+  .walk #petAll{ animation: walkRock 1.9s ease-in-out; }
+  @keyframes walkRock{ 0%,100%{ transform:translateX(0) rotate(0);} 25%{ transform:translateX(13px) rotate(4deg);} 50%{ transform:translateX(0) rotate(0);} 75%{ transform:translateX(-13px) rotate(-4deg);} }
+  .walk #legL{ animation: legLstep .95s ease-in-out 2 alternate; }
+  .walk #legR{ animation: legRstep .95s ease-in-out 2 alternate; }
+  @keyframes legLstep{ from{ transform:translateY(0);} to{ transform:translateY(-7px);} }
+  @keyframes legRstep{ from{ transform:translateY(-7px);} to{ transform:translateY(0);} }
+  .walk #armL{ animation: walkArmL .95s ease-in-out 2 alternate; }
+  .walk #armR{ animation: walkArmR .95s ease-in-out 2 alternate; }
+  @keyframes walkArmL{ from{ transform:rotate(-12deg);} to{ transform:rotate(16deg);} }
+  @keyframes walkArmR{ from{ transform:rotate(12deg);} to{ transform:rotate(-16deg);} }
+
+  /* 点头同意 */
+  .nod #petAll{ animation: nodHead 1.1s ease-in-out 2; }
+  @keyframes nodHead{ 0%,100%{ transform:scale(1,1);} 40%{ transform:scale(1.03,.94) translateY(4px);} }
+
+  /* 气泡 */
+  .bubble{
+    position:absolute; right:8px; bottom:calc(100% + 12px);
+    background:var(--glass2); border:1px solid var(--rim); backdrop-filter: blur(14px);
+    color:var(--text); font-size:12.5px; padding:8px 13px; border-radius:14px 14px 4px 14px;
+    white-space:nowrap; opacity:0; transform:translateY(6px) scale(.92); transition:all .25s; pointer-events:none;
+  }
+  .bubble.show{ opacity:1; transform:translateY(0) scale(1); }
+</style>
+</head>
+<body>
+<h1>TidyLab 电子宠物 · 3D 形象 Demo v2</h1>
+<div class="sub">按你的新参考图重做：3D 圆滚滚梨形身材 · 大黑眼珠+黄绿眼圈 · 短粗手脚。动作共 11 种，右下角常驻。</div>
+
+<div class="panel">
+  <h2>逐个触发动作（也可等它自己随机表演 / 点击它）</h2>
+  <div class="acts">
+    <button data-act="wave">👋 打招呼</button>
+    <button data-act="excited">🙌 兴奋挥臂</button>
+    <button data-act="dance">💃 摇摆舞</button>
+    <button data-act="jump">🦘 小跳</button>
+    <button data-act="walk">🚶 散步</button>
+    <button data-act="look">👀 左右张望</button>
+    <button data-act="turn">🔄 转个身</button>
+    <button data-act="wiggle">🍑 扭一扭</button>
+    <button data-act="surprise">😲 惊讶</button>
+    <button data-act="nod">🙇 点头</button>
+    <button data-act="sleep">😴 打盹</button>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="row">
+    <b style="color:var(--text)">外观：</b>
+    <button class="chip" id="btnTheme">🌓 切换深/浅主题</button>
+    <span>大小</span>
+    <input type="range" id="sizeR" min="96" max="220" value="150">
+    <span id="sizeV">150px</span>
+  </div>
+</div>
+
+<div class="panel filler">
+  <p>这里是页面内容。滚动页面、把鼠标放到宠物周围——它始终固定右下角、不被内容挡住，且它周围的点击会穿透到页面。</p>
+  <p style="height:80px"></p><p style="height:80px"></p><p style="height:80px"></p>
+  <p class="note"><b>v2 变化：</b>形象整体重做为 3D 渲染质感——梨形一体身材（小头大肚）、多层径向渐变+顶部高光+环境光遮蔽、大黑眼珠配黄绿眼圈、短粗手脚、落地软阴影随跳跃缩放。动作从 7 种增加到 <b>11 种</b>。</p>
+</div>
+
+<div class="pet-layer">
+  <div class="bubble" id="bubble"></div>
+  <div class="pet" id="pet" title="点点我">
+    <svg viewBox="0 0 200 226" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <!-- 3D 主体：左上受光 → 右下暗部 -->
+        <radialGradient id="gBody" cx="36%" cy="26%" r="88%">
+          <stop offset="0%"  stop-color="#FFF7C8"/>
+          <stop offset="38%" stop-color="#FCEB84"/>
+          <stop offset="72%" stop-color="#F3D455"/>
+          <stop offset="100%" stop-color="#DFAF32"/>
+        </radialGradient>
+        <!-- 右下环境光遮蔽叠层 -->
+        <radialGradient id="gShade" cx="78%" cy="88%" r="90%">
+          <stop offset="0%" stop-color="#B98A18" stop-opacity=".38"/>
+          <stop offset="55%" stop-color="#B98A18" stop-opacity=".10"/>
+          <stop offset="100%" stop-color="#B98A18" stop-opacity="0"/>
+        </radialGradient>
+        <!-- 顶部高光 -->
+        <radialGradient id="gHi" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#FFFFFF" stop-opacity=".85"/>
+          <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+        </radialGradient>
+        <!-- 眼圈（黄绿） -->
+        <radialGradient id="gEye" cx="42%" cy="36%" r="75%">
+          <stop offset="0%" stop-color="#F4F8D4"/>
+          <stop offset="70%" stop-color="#DCE59E"/>
+          <stop offset="100%" stop-color="#C4D078"/>
+        </radialGradient>
+        <!-- 手脚：比身体略深，末端更暗 -->
+        <radialGradient id="gLimbL" cx="30%" cy="22%" r="90%">
+          <stop offset="0%" stop-color="#FBE98F"/>
+          <stop offset="60%" stop-color="#EFCE57"/>
+          <stop offset="100%" stop-color="#C99B28"/>
+        </radialGradient>
+        <radialGradient id="gLimbR" cx="70%" cy="22%" r="90%">
+          <stop offset="0%" stop-color="#FBE98F"/>
+          <stop offset="60%" stop-color="#EFCE57"/>
+          <stop offset="100%" stop-color="#C99B28"/>
+        </radialGradient>
+        <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="2.2"/>
+        </filter>
+        <filter id="soft4" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="4"/>
+        </filter>
+      </defs>
+
+      <!-- 落地软阴影 -->
+      <ellipse id="petShadow" cx="100" cy="206" rx="52" ry="10" fill="#5B4308" opacity=".30" filter="url(#soft4)"/>
+
+      <g id="petAll">
+        <!-- 腿（短粗） -->
+        <g id="legL"><rect x="63" y="176" width="30" height="34" rx="15" fill="url(#gLimbL)"/><ellipse cx="78" cy="208" rx="15" ry="7" fill="#C08F20" opacity=".35" filter="url(#soft)"/></g>
+        <g id="legR"><rect x="107" y="176" width="30" height="34" rx="15" fill="url(#gLimbR)"/><ellipse cx="122" cy="208" rx="15" ry="7" fill="#C08F20" opacity=".35" filter="url(#soft)"/></g>
+
+        <!-- 梨形身体：小头大肚，一体成型 -->
+        <path id="bodyShape" fill="url(#gBody)" d="M100,12
+          C 63,12 42,44 44,86
+          C 45.5,118 32,132 28.5,157
+          C 24.5,183 56,200 100,200
+          C 144,200 175.5,183 171.5,157
+          C 168,132 154.5,118 156,86
+          C 158,44 137,12 100,12 Z"/>
+        <!-- 右下暗部 -->
+        <path fill="url(#gShade)" d="M100,12 C 63,12 42,44 44,86 C 45.5,118 32,132 28.5,157 C 24.5,183 56,200 100,200 C 144,200 175.5,183 171.5,157 C 168,132 154.5,118 156,86 C 158,44 137,12 100,12 Z"/>
+        <!-- 左上大高光（3D 感关键） -->
+        <ellipse cx="76" cy="46" rx="26" ry="17" fill="url(#gHi)" transform="rotate(-24 76 46)"/>
+        <ellipse cx="88" cy="34" rx="12" ry="7" fill="url(#gHi)" transform="rotate(-18 88 34)"/>
+        <!-- 肚皮反光 -->
+        <ellipse cx="96" cy="164" rx="40" ry="18" fill="#FFF3B0" opacity=".35" filter="url(#soft4)"/>
+
+        <!-- 手臂（短粗下垂，肩部为轴） -->
+        <g id="armL"><path fill="url(#gLimbL)" d="M44,118 C 30,124 24,140 27,156 C 29,166 38,170 45,166 C 52,162 54,150 53,138 C 52,128 50,120 44,118 Z"/></g>
+        <g id="armR"><path fill="url(#gLimbR)" d="M156,118 C 170,124 176,140 173,156 C 171,166 162,170 155,166 C 148,162 146,150 147,138 C 148,128 150,120 156,118 Z"/></g>
+
+        <!-- 脸 -->
+        <g id="face">
+          <g id="eyes">
+            <g id="pupils">
+              <!-- 眼圈 -->
+              <ellipse cx="76" cy="70" rx="17.5" ry="19.5" fill="url(#gEye)"/>
+              <ellipse cx="124" cy="70" rx="17.5" ry="19.5" fill="url(#gEye)"/>
+              <!-- 大黑眼珠 -->
+              <circle cx="77.5" cy="71" r="11.5" fill="#141008"/>
+              <circle cx="122.5" cy="71" r="11.5" fill="#141008"/>
+              <!-- 眼珠高光 -->
+              <circle cx="74" cy="66" r="4" fill="#FFFFFF" opacity=".95"/>
+              <circle cx="119" cy="66" r="4" fill="#FFFFFF" opacity=".95"/>
+              <circle cx="81" cy="76" r="1.8" fill="#FFFFFF" opacity=".5"/>
+              <circle cx="126" cy="76" r="1.8" fill="#FFFFFF" opacity=".5"/>
+            </g>
+          </g>
+          <!-- 微笑 -->
+          <path d="M89,102 Q 100,110 111,102" fill="none" stroke="#8A6A1E" stroke-width="2.6" stroke-linecap="round"/>
+          <!-- 腮红 -->
+          <ellipse cx="58" cy="92" rx="8" ry="5" fill="#F2B95C" opacity=".45" filter="url(#soft)"/>
+          <ellipse cx="142" cy="92" rx="8" ry="5" fill="#F2B95C" opacity=".45" filter="url(#soft)"/>
+        </g>
+      </g>
+
+      <!-- Zzz -->
+      <g id="zzz" transform="translate(140,26)">
+        <text x="0" y="0">Z</text><text x="14" y="-8">z</text><text x="25" y="-13">z</text>
+      </g>
+    </svg>
+  </div>
+</div>
+
+<script>
+(function(){
+  const pet = document.getElementById('pet');
+  const layer = document.querySelector('.pet-layer');
+  const bubble = document.getElementById('bubble');
+  const ACTS = ['wave','excited','dance','jump','walk','look','turn','wiggle','surprise','nod'];
+  const SAY = {
+    wave:['嗨～今天也要好好收纳哦','你好呀！','发现啦！有物品没归位~'],
+    excited:['哇！！好多物品入库啦','太棒了吧！','嘿嘿嘿——'],
+    dance:['动次打次～','跟着节奏摇起来','舞力全开！'],
+    jump:['跳！','接住我！','蹦蹦跳跳~'],
+    walk:['溜达溜达','去哪个柜子看看呢','散步有助于消化'],
+    look:['咦？那边有什么','让我康康','左右看看~'],
+    turn:['看你背后！','变！','其实我的背面也很圆'],
+    wiggle:['扭扭更健康','圆滚滚的骄傲','摇摆摇摆~'],
+    surprise:['哇！！吓我一跳','什么情况！','瞪大眼睛ing'],
+    nod:['嗯嗯，说得对','收到收到','没错没错！'],
+    sleep:['Zzz…（先眯一会）','好困呀…','梦里也在收纳…'],
+    poke:['戳我干嘛！','痒痒的~','再戳就扁了！']
+  };
+  let cur='', timer=null, schedTimer=null, blinkTimer=null;
+
+  function say(text){
+    bubble.textContent = text;
+    bubble.classList.add('show');
+    clearTimeout(timer);
+    timer = setTimeout(()=>bubble.classList.remove('show'), 2200);
+  }
+  function rand(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+  function play(name, silent){
+    if (cur){ pet.classList.remove(cur); }
+    cur = name;
+    // 强制重排以重启动画
+    void pet.offsetWidth;
+    pet.classList.add(name);
+    if (!silent) say(rand(SAY[name]||['嘿嘿']));
+    const dur = name==='sleep' ? 6000
+      : (name==='excited'||name==='wiggle') ? 3000
+      : (name==='dance'||name==='wave') ? 4200
+      : 2600;
+    clearTimeout(pet._actT);
+    pet._actT = setTimeout(()=>{
+      pet.classList.remove(name);
+      if (cur===name) cur='';
+      if (name==='sleep') say('睡饱啦！');
+    }, dur);
+  }
+  function schedule(){
+    schedTimer = setTimeout(()=>{
+      if (!cur) play(rand(Math.random()<.14 ? ['sleep'] : ACTS), Math.random()<.4);
+      schedule();
+    }, 3800 + Math.random()*4600);
+  }
+  function blinkLoop(){
+    blinkTimer = setTimeout(()=>{
+      if (!cur || cur==='wave'||cur==='dance'||cur==='walk'){
+        pet.classList.remove('blink'); void pet.offsetWidth; pet.classList.add('blink');
+        setTimeout(()=>pet.classList.remove('blink'), 400);
+      }
+      blinkLoop();
+    }, 2400 + Math.random()*3200);
+  }
+
+  pet.addEventListener('click', ()=>{ play(rand(ACTS)); });
+
+  document.querySelectorAll('.acts button').forEach(b=>{
+    b.addEventListener('click', ()=>play(b.dataset.act));
+  });
+
+  document.getElementById('btnTheme').addEventListener('click', ()=>{
+    document.body.classList.toggle('light');
+  });
+  const sizeR = document.getElementById('sizeR'), sizeV = document.getElementById('sizeV');
+  sizeR.addEventListener('input', ()=>{
+    layer.style.setProperty('--pet-size', sizeR.value+'px');
+    sizeV.textContent = sizeR.value+'px';
+  });
+
+  schedule(); blinkLoop();
+})();
+</script>
+</body>
+</html>

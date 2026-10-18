@@ -58,7 +58,7 @@ window.Components.SearchPage = {
 
     <div v-if="searched && !results.length && !error" class="glass card"><div class="empty">没有找到匹配的物品</div></div>
     <div class="result glass lift" v-for="r in results" :key="r.id" @click="openItem(r.id)">
-      <div class="thumb"><img v-if="r.img" :src="imgSrc(r.img)"><span v-else>📦</span></div>
+      <div class="thumb"><img v-if="r.img" :src="imgSrc(r.img, 160)" loading="lazy" decoding="async"><span v-else>📦</span></div>
       <div><div class="r-name">{{ r.name }}</div>
         <div class="r-loc" v-for="p in r.placements" :key="p.id">{{ p.path }} · 数量 {{ p.qty }}</div>
         <div class="r-loc" v-if="!r.placements.length">无在库位置</div>

@@ -8,6 +8,8 @@ const recognizer = require('../services/recognizer');
 const suggester = require('../services/suggester');
 const { currentProvider } = require('../services/aiProvider');
 const { IMAGES_DIR, UPLOADS_DIR } = require('../paths');
+// 名称查重算法与云端共用同一份实现（public/js/cloud/tidy-shared.js 是 UMD，Node 也可直接 require）
+const T = require('../../public/js/cloud/tidy-shared.js');
 
 const router = express.Router();
 const multer = require('multer');
@@ -61,6 +63,24 @@ router.post('/intake/analyze', upload.single('image'), wrap(async (req, res) => 
   });
   const payload = { mode, file: file.filename, mime, previewUrl: `/api/uploads/${file.filename}`, rec };
   const id = req.db.prepare('INSERT INTO intake_queue(payload) VALUES (?)').run(JSON.stringify(payload)).lastInsertRowid;
+  ok(res, { id, ...payload });
+}));
+
+// ---- 手动录入（不用 AI）：只上传照片，物品名/类别/数量由用户自己填 ----
+// 与「AI 识别」并存，供用户按需选择。这里只负责把照片存下来并占一条队列记录，
+// 名称等字段在 /intake/confirm 时才落库（payload.manual=true 允许任意 index）。
+// status 直接给 'done'：它不是"待 AI 确认"的任务，不该出现在待确认队列里。
+router.post('/intake/manual', upload.single('image'), wrap(async (req, res) => {
+  const file = req.file;
+  const mime = file ? (IMAGE_MIMES[path.extname(file.filename).toLowerCase()] || 'image/jpeg') : null;
+  const payload = {
+    mode: 'manual', manual: true,
+    file: file ? file.filename : null, mime,
+    previewUrl: file ? `/api/uploads/${file.filename}` : '',
+    rec: { items: [] },
+  };
+  const id = req.db.prepare("INSERT INTO intake_queue(payload,status) VALUES (?,'done')")
+    .run(JSON.stringify(payload)).lastInsertRowid;
   ok(res, { id, ...payload });
 }));
 
@@ -122,7 +142,8 @@ router.post('/intake/confirm', wrap(async (req, res) => {
   const b = req.body || {};
   const row = lib.mustExist(db, 'intake_queue', Number(b.queueId), '队列项');
   const payload = JSON.parse(row.payload);
-  const item = (payload.rec.items || [])[Number(b.index) || 0];
+  // 手动录入（payload.manual）的照片可以配任意多条物品，不受 rec.items 长度限制
+  const item = (payload.rec.items || [])[Number(b.index) || 0] || (payload.manual ? {} : null);
   if (!item) throw new ApiError(400, '队列项中没有该物品');
 
   const name = String(b.name || item.name || '').trim();
@@ -135,12 +156,36 @@ router.post('/intake/confirm', wrap(async (req, res) => {
   if (shelfId) lib.mustExist(db, 'shelves', shelfId, '层');
 
   const cat = resolveCategory(db, b.category || item.category);
-  // 同名物品合并：复用已有物品，实现"多位置独立数量"（PRD C5）
-  const existing = db.prepare('SELECT id FROM items WHERE name=?').get(name);
-  const ii = existing ? existing.id
-    : db.prepare('INSERT INTO items(name,aliases,category_id,size_class,note) VALUES (?,?,?,?,?)')
-      .run(name, JSON.stringify(b.aliases || item.aliases || []), cat.id,
-        ['S', 'M', 'L'].includes(b.size) ? b.size : (item.size || 'S'), b.note || null).lastInsertRowid;
+
+  // 同名 / 近似名合并：v2.4 起由前端先查重、用户确认后再显式传 mergeItemId，
+  // 也可以指定 mergePlacementId 直接并到"已入库过的那个位置"。
+  // 未传 mergeItemId 时仍保留旧的「完全同名自动合并」行为（兼容老客户端与脚本调用）。
+  const mergeItemId = b.mergeItemId ? Number(b.mergeItemId) : null;
+  const mergePlacementId = b.mergePlacementId ? Number(b.mergePlacementId) : null;
+  let existing = null;
+  let ii;
+  if (mergeItemId) {
+    existing = lib.mustExist(db, 'items', mergeItemId, '要合并的物品');
+    ii = existing.id;
+  } else {
+    existing = db.prepare('SELECT id, name FROM items WHERE name=?').get(name) || null;
+    ii = existing ? existing.id
+      : db.prepare('INSERT INTO items(name,aliases,category_id,size_class,note) VALUES (?,?,?,?,?)')
+        .run(name, JSON.stringify(b.aliases || item.aliases || []), cat.id,
+          ['S', 'M', 'L'].includes(b.size) ? b.size : (item.size || 'S'), b.note || null).lastInsertRowid;
+  }
+
+  // 合并时名称不同（例如库里叫「十字螺丝刀」、这次写成「十字螺丝刀(小)」）：
+  // 保留库里已有的规范名，把这次的写法补进别名，下次搜索/查重都能命中，不再长出第二条物品。
+  let aliasAdded = '';
+  if (existing && existing.name && T.nameKey(existing.name) !== T.nameKey(name)) {
+    const oldAliases = JSON.parse(existing.aliases || '[]');
+    if (name && !oldAliases.some((a) => T.nameKey(a) === T.nameKey(name))) {
+      oldAliases.push(name);
+      db.prepare('UPDATE items SET aliases=? WHERE id=?').run(JSON.stringify(oldAliases), ii);
+      aliasAdded = name;
+    }
+  }
 
   // 图片：用户拍摄的照片移入 images/<itemId>/ 并作为实物主图（v1.2 起不再联网配图）
   let mainUrl = null;
@@ -158,24 +203,50 @@ router.post('/intake/confirm', wrap(async (req, res) => {
     const rel = `images/${ii}/photo-${stamp}${ext}`;
     db.prepare('INSERT INTO item_images(item_id,file,source,is_main) VALUES (?,?,?,?)')
       .run(ii, rel, 'user', 1);
+    // 立刻生成列表用的小图：用户下次打开总览时直接命中缓存，
+    // 不用现场解一张 1600px 的大图（首次浏览会明显卡一下）
+    require('../thumb').warm(rel).catch(() => {});
     mainUrl = rel;
   }
 
   // 同容器已有存放记录 → 累加数量；否则新建一条独立存放记录
-  const sameLoc = db.prepare('SELECT id, qty FROM placements WHERE item_id=? AND shelf_id IS ? AND box_id IS ?')
-    .get(ii, shelfId, boxId);
-  if (sameLoc) {
-    db.prepare('UPDATE placements SET qty=?, updated_at=datetime(?,?) WHERE id=?')
-      .run(sameLoc.qty + qty, 'now', 'localtime', sameLoc.id);
+  // mergePlacementId：用户明确选择"并到已有入库位置"，直接给那条记录加数量
+  let locShelf = shelfId;
+  let locBox = boxId;
+  let mergedPlacementId = null;
+  if (mergePlacementId) {
+    const target = db.prepare('SELECT * FROM placements WHERE id=? AND item_id=?').get(mergePlacementId, ii);
+    if (!target) throw new ApiError(404, '要合并的存放位置不存在');
+    db.prepare("UPDATE placements SET qty=?, updated_at=datetime('now','localtime') WHERE id=?")
+      .run(target.qty + qty, target.id);
+    locShelf = target.shelf_id;
+    locBox = target.box_id;
+    mergedPlacementId = target.id;
   } else {
-    db.prepare('INSERT INTO placements(item_id,shelf_id,box_id,qty) VALUES (?,?,?,?)')
-      .run(ii, shelfId, boxId, qty);
+    const sameLoc = db.prepare('SELECT id, qty FROM placements WHERE item_id=? AND shelf_id IS ? AND box_id IS ?')
+      .get(ii, shelfId, boxId);
+    if (sameLoc) {
+      db.prepare("UPDATE placements SET qty=?, updated_at=datetime('now','localtime') WHERE id=?")
+        .run(sameLoc.qty + qty, sameLoc.id);
+      mergedPlacementId = sameLoc.id;
+    } else {
+      mergedPlacementId = db.prepare('INSERT INTO placements(item_id,shelf_id,box_id,qty) VALUES (?,?,?,?)')
+        .run(ii, shelfId, boxId, qty).lastInsertRowid;
+    }
   }
-  const loc = lib.locationPath(db, shelfId, boxId).join(' › ');
-  lib.addLog(db, { itemId: ii, action: 'in', qty, location: loc, detail: `识别入库（置信度 ${(item.confidence * 100).toFixed(0)}%）` });
+  const loc = lib.locationPath(db, locShelf, locBox).join(' › ');
+  const confidence = Number.isFinite(Number(item.confidence)) ? Number(item.confidence) : null;
+  lib.addLog(db, {
+    itemId: ii, action: 'in', qty, location: loc,
+    detail: (payload.manual ? '手动录入' : `识别入库（置信度 ${(confidence * 100).toFixed(0)}%）`)
+      + (existing && existing.name && existing.name !== name ? `；合并到「${existing.name}」（名称记为别名）` : ''),
+  });
   db.prepare("UPDATE intake_queue SET status='done' WHERE id=?").run(row.id);
 
-  ok(res, { itemId: ii, merged: !!existing, location: loc, qty });
+  ok(res, {
+    itemId: ii, merged: !!existing, mergedName: existing ? existing.name : name,
+    aliasAdded, placementId: mergedPlacementId, location: loc, qty,
+  });
 }));
 
 // ---- 出库 ----
@@ -251,6 +322,34 @@ router.patch('/items/:id', wrap(async (req, res) => {
   ok(res, { ...fresh, aliases: JSON.parse(fresh.aliases || '[]'), category: cat ? cat.name : (oldCat ? oldCat.name : '') });
 }));
 
+// ---- 名称查重（入库前） ----
+// 返回库里与「刚输入的名字」重复/相近的已有物品，附上它们所有存放位置的选项，
+// 供前端弹窗让用户选择：合并到已有物品（可指定并入哪个位置）还是换个名字/仍新建。
+// ⚠️ 必须注册在 GET /items/:id 之前，否则会被 :id 吞掉（"name-check" 当 id 解析成 NaN → 404）
+router.get('/items/name-check', (req, res) => {
+  const db = req.db;
+  const name = String(req.query.name || '').trim();
+  if (!name) return ok(res, { name, matches: [] });
+  const rows = db.prepare(`
+    SELECT i.id, i.name, i.aliases, i.note, c.name AS category,
+      (SELECT COALESCE(SUM(qty),0) FROM placements p WHERE p.item_id=i.id) AS totalQty
+    FROM items i LEFT JOIN categories c ON c.id=i.category_id
+  `).all();
+  const excludeId = req.query.excludeId ? Number(req.query.excludeId) : null;
+  const found = T.findNameMatches(name, rows, { excludeId, limit: 5 });
+  const matches = found.map((m) => ({
+    id: m.item.id,
+    name: m.item.name,
+    category: m.item.category || '',
+    totalQty: m.item.totalQty,
+    score: m.score,
+    reason: m.reason,
+    placements: db.prepare('SELECT * FROM placements WHERE item_id=? ORDER BY qty DESC, id').all(m.item.id)
+      .map((p) => ({ id: p.id, qty: p.qty, path: lib.locationPath(db, p.shelf_id, p.box_id).join(' › ') })),
+  }));
+  ok(res, { name, matches });
+});
+
 // ---- 详情 ----
 router.get('/items/:id', wrap(async (req, res) => {
   const db = req.db;
@@ -269,7 +368,7 @@ router.get('/items', (req, res) => {
   const q = String(req.query.q || '').trim();
   let rows = db.prepare(`
     SELECT i.*, c.name AS category,
-      (SELECT file FROM item_images ii WHERE ii.item_id=i.id AND ii.is_main=1 LIMIT 1) AS img,
+      (SELECT file FROM item_images ii WHERE ii.item_id=i.id ORDER BY ii.is_main DESC, ii.id ASC LIMIT 1) AS img,
       (SELECT COALESCE(SUM(qty),0) FROM placements p WHERE p.item_id=i.id) AS totalQty
     FROM items i LEFT JOIN categories c ON c.id=i.category_id ORDER BY i.id DESC LIMIT 200
   `).all();

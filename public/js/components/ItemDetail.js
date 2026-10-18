@@ -10,7 +10,8 @@ window.Components.ItemDetail = {
     totalQty() { return this.item ? this.item.placements.reduce((n, p) => n + p.qty, 0) : 0; },
     mainImg() {
       if (!this.item || !this.item.images.length) return '';
-      return imgSrc(this.item.images[0].file);
+      // 详情页大图：宽 1280 足够全屏显示，原图留给「看原图 / 下载」
+      return imgSrc(this.item.images[0].file, 1280);
     },
   },
   watch: {
@@ -20,12 +21,15 @@ window.Components.ItemDetail = {
         this.item = null; this.editing = false;
         if (!id) return;
         try {
-          this.item = await api('GET', '/items/' + id);
+          // 物品详情和类别表一起要：两个请求并行发，省一个来回（手机上就是省 200~600ms）
+          const needMeta = !this.categories.length;
+          const [item, meta] = await Promise.all([
+            api('GET', '/items/' + id),
+            needMeta ? api('GET', '/stats/meta').catch(() => null) : Promise.resolve(null),
+          ]);
+          this.item = item;
           this.fillForm();
-          if (!this.categories.length) {
-            const m = await api('GET', '/stats/meta');
-            this.categories = m.categories || [];
-          }
+          if (meta) this.categories = meta.categories || [];
         } catch (e) { alert(e.message); store.detailItemId = null; }
       },
     },
@@ -86,6 +90,13 @@ window.Components.ItemDetail = {
     },
   },
   template: `
+  <!-- 点了物品但详情还在路上：先把遮罩和"正在读取"放出来，别让用户觉得没点上 -->
+  <div v-if="store.detailItemId && !item" class="modal-mask" @click.self="close">
+    <div class="modal glass detail-loading">
+      <div class="spinner"></div>
+      <div class="muted">正在读取物品详情…</div>
+    </div>
+  </div>
   <div v-if="store.detailItemId && item" class="modal-mask" @click.self="close">
     <div class="modal glass">
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">

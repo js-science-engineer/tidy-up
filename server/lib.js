@@ -8,7 +8,7 @@ function getTree(db) {
   const boxes = db.prepare('SELECT * FROM boxes ORDER BY sort, id').all();
   const placements = db.prepare(`
     SELECT p.*, i.name AS item_name,
-           (SELECT file FROM item_images ii WHERE ii.item_id = i.id AND ii.is_main = 1 LIMIT 1) AS img
+           (SELECT file FROM item_images ii WHERE ii.item_id=i.id ORDER BY ii.is_main DESC, ii.id ASC LIMIT 1) AS img
     FROM placements p JOIN items i ON i.id = p.item_id
   `).all();
 

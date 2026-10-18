@@ -7,6 +7,8 @@ const router = express.Router();
 
 // 把树里的一个"层/抽屉"转成前端可视化需要的结构（含柜内物品明细）
 // placementId / boxId 供前端"拖拽移位"精确定位到某一条存放记录（同一物品可在多位置各有一份）
+// 注意：items 必须完整返回。早期版本在这里截断成 8 条，导致总览里一层超过 8 件物品时
+// 后面的永远看不到（用户反馈"部分物品显示出来，不完全"）。
 function shelfView(s) {
   const items = [];
   for (const p of s.items) {
@@ -19,8 +21,8 @@ function shelfView(s) {
   }
   return {
     id: s.id, name: s.name, kind: s.kind, state: s.state,
-    items: items.slice(0, 8),
-    more: Math.max(0, items.length - 8),
+    items,
+    more: 0,
     total: items.reduce((n, i) => n + i.qty, 0),
   };
 }
@@ -83,7 +85,7 @@ router.get('/overview', (req, res) => {  const db = req.db;
   // 最近入库物品
   const recent = db.prepare(`
     SELECT i.id, i.name, c.name AS category,
-      (SELECT file FROM item_images ii WHERE ii.item_id=i.id AND ii.is_main=1 LIMIT 1) AS img,
+      (SELECT file FROM item_images ii WHERE ii.item_id=i.id ORDER BY ii.is_main DESC, ii.id ASC LIMIT 1) AS img,
       (SELECT COALESCE(SUM(qty),0) FROM placements p WHERE p.item_id=i.id) AS totalQty
     FROM items i LEFT JOIN categories c ON c.id=i.category_id ORDER BY i.id DESC LIMIT 8
   `).all();
@@ -121,7 +123,7 @@ router.get('/board', (req, res) => {
 
   const topItems = db.prepare(`
     SELECT i.id, i.name, c.name AS category,
-      (SELECT file FROM item_images ii WHERE ii.item_id=i.id AND ii.is_main=1 LIMIT 1) AS img,
+      (SELECT file FROM item_images ii WHERE ii.item_id=i.id ORDER BY ii.is_main DESC, ii.id ASC LIMIT 1) AS img,
       (SELECT COALESCE(SUM(qty),0) FROM placements p WHERE p.item_id=i.id) AS qty,
       (SELECT COUNT(*) FROM placements p WHERE p.item_id=i.id AND p.qty>0) AS spots
     FROM items i LEFT JOIN categories c ON c.id=i.category_id
@@ -142,7 +144,7 @@ router.get('/board', (req, res) => {
   // 出入库流水明细：用户做了什么、动了哪个物品、多少件、在哪里（统计看板核心区块）
   const recentLogs = db.prepare(`
     SELECT l.*, i.name AS item_name,
-      (SELECT file FROM item_images ii WHERE ii.item_id=l.item_id AND ii.is_main=1 LIMIT 1) AS img
+      (SELECT file FROM item_images ii WHERE ii.item_id=l.item_id ORDER BY ii.is_main DESC, ii.id ASC LIMIT 1) AS img
     FROM logs l LEFT JOIN items i ON i.id=l.item_id
     WHERE l.action IN ('in','out','move','edit')
     ORDER BY l.id DESC LIMIT 80

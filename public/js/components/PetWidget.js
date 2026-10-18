@@ -36,6 +36,8 @@
     '  <button class="pm-btn" id="pmHide">🙈 隐藏这只宠物</button>',
     '  <button class="pm-btn" id="pmCopy">⧉ 复制这只宠物</button>',
     '  <button class="pm-btn danger" id="pmDel">🗑 删除这只宠物</button>',
+    '  <div class="pm-sep"></div>',
+    '  <button class="pm-btn" id="pmStop">⏸ 停止宠物模拟（最省电）</button>',
     '</div>',
     '<div class="look-modal" id="lookModal" hidden>',
     '  <div class="lm-backdrop" id="lmBackdrop"></div>',
@@ -350,12 +352,103 @@
     }
     refreshMenu();
   }
+  /* ---------- 自动表演节奏 ----------
+   * 手机上默认「按需表演」：只有点它 / 拖它才动，空闲时完全静止。
+   * 原因：原来每 3.8~8.4 秒就自动播一段 3.2~6.5 秒的循环动画，占空比接近 70%，
+   * 等于用户什么都不做，手机 GPU/CPU 也在持续跑动画。实测（4x CPU 降速的手机模拟）
+   * 宠物空转占掉约 9% 主线程，总览页帧率被拉到 42fps —— 这是"发烫"里最不该有的一份。
+   * 桌面端保持原来的活泼节奏；两端都可以在设置里手动切换（localStorage 记住）。 */
+  const AUTO_KEY = () => 'tidy-pet-auto:' + (window.TIDY_UID || 'local');
+  let autoPlayOverride = null;      // null = 跟随设备默认
+  function isLite(){ return !!(document.body && document.body.classList.contains('perf-lite')); }
+  function autoPlayOn(){
+    if (autoPlayOverride !== null) return autoPlayOverride;
+    try {
+      const v = localStorage.getItem(AUTO_KEY());
+      if (v === '0') return false;
+      if (v === '1') return true;
+    } catch { /* 隐私模式取不到就用默认 */ }
+    return !isLite();               // 手机默认关，桌面默认开
+  }
+  function applySchedule(){
+    pets.forEach(p => {
+      clearTimeout(p._schedT); p._schedT = 0;
+      if (!p.cur) setIdle(p);
+      if (autoPlayOn()) schedule(p);
+    });
+  }
+  function setAutoPlay(on){
+    autoPlayOverride = !!on;
+    try { localStorage.setItem(AUTO_KEY(), on ? '1' : '0'); } catch { /* 忽略 */ }
+    applySchedule();
+    refreshMenu();
+    return autoPlayOverride;
+  }
+  // 设置页 / 调试用
+  // reschedule：性能模式切换后按新节奏重排（不写死用户偏好）
+  window.__petAutoPlay = { get: autoPlayOn, set: setAutoPlay, reschedule: applySchedule };
+
+  /* ---------- 总开关：停止 / 重新开启宠物模拟 ----------
+   * 和上面的「自动表演」不是一回事：
+   *   · 关自动表演 = 不主动表演，宠物还站在那儿，点它照样会动；
+   *   · 关这里     = 整个宠物停掉（层隐藏 + 所有计时器 / 转身 rAF 全部取消），
+   *                 页面上不再有任何宠物相关的渲染，适合"我就想安静整理东西"。
+   * 偏好按用户存 localStorage，下次打开保持一致；随时可点「设置 → 电子宠物」或
+   * 左下角的小胶囊重新开启。 */
+  const ENABLE_KEY = () => 'tidy-pet-enabled:' + (window.TIDY_UID || 'local');
+  let ghostT = 0, ghostDismissed = false;
+  function petEnabled(){
+    try { return localStorage.getItem(ENABLE_KEY()) !== '0'; } catch { return true; }
+  }
+  // 让某只宠物彻底静下来：停排程、停当前动作、停气泡、停转身 rAF
+  function suspendPet(p){
+    clearTimeout(p._schedT); p._schedT = 0;
+    clearTimeout(p._actT);   p._actT = 0;
+    clearTimeout(p._sayT);   p._sayT = 0;
+    setIdle(p);
+    p.el.classList.remove('acting-sleep');
+    const b = p.el.querySelector('.bubble');
+    if (b) b.classList.remove('show');
+  }
+  function setEnabled(on){
+    const v = !!on;
+    try { localStorage.setItem(ENABLE_KEY(), v ? '1' : '0'); } catch { /* 忽略 */ }
+    document.body.classList.toggle('pet-off', !v);
+    if (!v){
+      // 停止：先把弹窗/菜单收起来，再让每只宠物静下来
+      hideMenu();
+      if (lookModal && !lookModal.hidden) closeLook();
+      pets.forEach(suspendPet);
+      drag = null;   // 中断进行中的拖拽，避免重开后残留位移状态
+      // 刚停止时给一个 12 秒的「点这里重新开启」撤销入口，之后收起，
+      // 免得页面上永远挂着一枚胶囊；常驻入口在「设置 → 电子宠物」。
+      ghostDismissed = false;
+      clearTimeout(ghostT);
+      ghostT = setTimeout(() => { ghostDismissed = true; updateGhostBar(); }, 12000);
+    } else {
+      // 开启：恢复原样（原本被隐藏的宠物仍保持隐藏，只是可以再点出来）
+      clearTimeout(ghostT); ghostDismissed = false;
+      pets.forEach(p => { if (!p.hidden){ setIdle(p); schedule(p); } });
+    }
+    updateGhostBar();
+    refreshMenu();
+    return v;
+  }
+
   function schedule(p){
     clearTimeout(p._schedT);
+    if (!petEnabled() || !autoPlayOn()) { p._schedT = 0; return; }
+    const lite = isLite();
+    // 性能模式下拉长到 18~40 秒，且只挑短动作（不做"睡 6.5 秒 + Zzz 常驻"这种长动画）
+    const gap = lite ? 18000 + Math.random() * 22000 : 3800 + Math.random() * 4600;
     p._schedT = setTimeout(() => {
-      if (!p.hidden && !p.cur) play(p, rand(Math.random() < .14 ? ['sleep'] : ACTS), Math.random() < .4);
+      p._schedT = 0;
+      if (!p.hidden && !p.cur) {
+        const pool = lite ? ['nod', 'surprise', 'look'] : (Math.random() < .14 ? ['sleep'] : ACTS);
+        play(p, rand(pool), Math.random() < .4);
+      }
       schedule(p);
-    }, 3800 + Math.random() * 4600);
+    }, gap);
   }
 
   /* ---------- 创建 / 复制 / 删除 / 隐藏 ---------- */
@@ -433,6 +526,12 @@
     updateGhostBar();
   }
   function updateGhostBar(){
+    // 宠物被整体停掉时，这枚小胶囊是"撤销"入口（12 秒后自动收起，常驻入口在设置页）
+    if (!petEnabled()){
+      ghostBar.hidden = ghostDismissed;
+      if (!ghostDismissed) ghostBar.textContent = '🐾 宠物已停止 · 点这里重新开启';
+      return;
+    }
     const n = pets.filter(p => p.hidden).length;
     ghostBar.hidden = n === 0;
     if (n) ghostBar.textContent = '🐾 有 ' + n + ' 只宠物隐藏中 · 点击恢复';
@@ -503,9 +602,13 @@
   }
 
   /* ---------- 视线追踪：空闲时宠物会"看"着鼠标（转头 + 微移），动作/拖动时自动让位 ---------- */
+  // 手机 / 触屏没有真正的"悬停指针"：滚动时也会不断触发 pointermove，
+  // 每次都要跑一轮 rAF 改 transform，纯属白烧电。触屏设备直接不启用。
+  const COARSE_POINTER = typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches;
   const pointer = { x: 0, y: 0, has: false, last: 0 };
   let trackRaf = 0;
-  window.addEventListener('pointermove', e => {
+  if (!COARSE_POINTER) window.addEventListener('pointermove', e => {
+    if (document.hidden) return;
     pointer.x = e.clientX; pointer.y = e.clientY;
     pointer.has = true; pointer.last = performance.now();
     if (!trackRaf) trackRaf = requestAnimationFrame(trackStep);
@@ -615,6 +718,8 @@
   document.getElementById('pmReset').addEventListener('click', () => { if (menuPet) resetCorner(menuPet); hideMenu(); });
   document.getElementById('pmHide').addEventListener('click', () => { if (menuPet) hidePet(menuPet); });
   document.getElementById('pmCopy').addEventListener('click', () => { if (menuPet) copyPet(menuPet); hideMenu(); });
+  // 停止宠物模拟：把整层停掉（不是隐藏单只），之后可点左下角小胶囊或去设置里重新开启
+  document.getElementById('pmStop').addEventListener('click', () => { setEnabled(false); });
   pmDel.addEventListener('click', () => { if (menuPet) removePet(menuPet); });
   pmLook.addEventListener('click', openLook);
 
@@ -642,7 +747,10 @@
     if (p) say(p, '换回默认图像啦');
     console.log('[pet] 已恢复默认图像');
   });
-  ghostBar.addEventListener('click', unhideAll);
+  ghostBar.addEventListener('click', () => {
+    if (!petEnabled()){ setEnabled(true); if (pets[0]) say(pets[0], '我回来啦！'); return; }
+    unhideAll();
+  });
 
   document.addEventListener('pointerdown', e => {
     if (menu.hidden || e.button === 2) return;
@@ -1235,7 +1343,19 @@
   /* ---------- 启动：恢复上次保存的形象 → 右下角蹦出第一只 ---------- */
   currentLook = loadLook();
   updateLookName();
+  // 上次手动停掉过宠物 → 这次也保持停止（状态跟人走，不能每次刷新都自己复活）
+  document.body.classList.toggle('pet-off', !petEnabled());
+  // 早就停掉的话不弹「撤销」胶囊，避免每次刷新都跳出来；入口在设置页
+  ghostDismissed = !petEnabled();
   createPet({ size: 150 });
+  updateGhostBar();
+  // 供设置页 / 调试使用：停止与开启宠物模拟
+  Object.assign(window.PetWidget, {
+    isEnabled: petEnabled,
+    setEnabled,
+    stop() { return setEnabled(false); },
+    start() { return setEnabled(true); },
+  });
   // 调试/自动化测试钩子（控制播放与排程 + 形象读写）
   window.__petDebug = {
     pets, play, setIdle, schedule, pointer,

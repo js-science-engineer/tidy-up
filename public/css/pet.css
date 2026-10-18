@@ -150,10 +150,14 @@ body.light{
 /* Zzz */
 .zzz{ position:absolute; right:-6px; top:-4px; opacity:0; pointer-events:none; transition:opacity .3s; }
 .acting-sleep .zzz{ opacity:1; }
+/* 只在真的睡着时才启动动画。
+   早期写法是 3 个 span 常驻 animation:infinite —— 即使 opacity:0 不可见，
+   浏览器仍会为它们每帧推进动画、维护合成层，手机端等于永远在跑 3 个无限动画。 */
 .zzz span{
   position:absolute; right:0; top:0; color:#9fb7ff; font:bold 18px "Comic Sans MS",system-ui;
-  animation: zfloat 2.1s ease-in-out infinite;
+  animation: none;
 }
+.acting-sleep .zzz span{ animation: zfloat 2.1s ease-in-out infinite; }
 .zzz span:nth-child(2){ font-size:14px; animation-delay:.6s; right:12px; top:-2px; }
 .zzz span:nth-child(3){ font-size:11px; animation-delay:1.2s; right:22px; top:2px; }
 @keyframes zfloat{ 0%{ transform:translate(0,8px); opacity:0;} 30%{ opacity:.95;} 100%{ transform:translate(10px,-20px); opacity:0;} }
@@ -371,4 +375,36 @@ body.light .lm-backdrop{ background:rgba(28,38,68,.34); }
   .lm-scroll{ padding:13px 14px 4px; }
   .pet-menu{ width:min(252px, calc(100vw - 20px)); }
   .ghost-bar{ right:12px; bottom:12px; font-size:12px; padding:8px 14px; }
+}
+
+/* ---------- 移动端性能：宠物常驻动画是持续 60fps 合成，手机上很耗电 ---------- */
+/* 窄屏 / 触屏设备、或用户手动开启性能模式时：关掉待机浮动与阴影呼吸，只保留交互时的动作动画 */
+@media (max-width:860px), (pointer:coarse){
+  .pet-3d, .pet-shadow{ animation:none !important; }
+  .pet-3d{ will-change:auto; }
+}
+body.perf-lite .pet-3d, body.perf-lite .pet-shadow{ animation:none !important; }
+body.perf-lite .pet-3d{ will-change:auto; }
+/* 性能模式下不再给每个 3D 面预留独立合成层：一只宠物 4 个 face × 720×900 贴图，
+   常驻合成层会一直占着手机 GPU 显存，滚动时还要跟着重绘。改成按需提升。 */
+body.perf-lite .pet-cyl, body.perf-lite .face{ will-change:auto; }
+body.perf-lite .zzz span{ animation:none !important; }
+@media (prefers-reduced-motion:reduce){
+  .pet-3d, .pet-shadow, .pet-stage{ animation:none !important; }
+}
+
+/* =================== 停止 / 重新开启宠物模拟 =================== */
+/* 手动「停止宠物模拟」后，整层不参与布局与绘制（display:none 不产生任何合成，
+   比"隐藏单只"更彻底）。宠物已点击/拖拽不了，等于完全退出运行。 */
+body.pet-off .pet-layer,
+body.pet-off .pet-menu{ display:none !important; }
+
+/* 左下/右下角的「宠物已停止 · 点这里重新开启」是固定层，
+   手机上不要再叠一层毛玻璃（那会变成一个常驻模糊层，反而白耗电）。 */
+@media (max-width:860px), (pointer:coarse){
+  .ghost-bar{ backdrop-filter:none; -webkit-backdrop-filter:none; }
+}
+body.perf-lite .ghost-bar{
+  backdrop-filter:none !important; -webkit-backdrop-filter:none !important;
+  box-shadow:0 6px 18px rgba(0,0,0,.22);
 }

@@ -3,17 +3,51 @@ window.Components.SettingsPage = {
   data: () => ({
     cfg: null, info: null, backups: [], busy: false, msg: '', err: '',
     keyInput: { glm: '', qwen: '' },
+    perfLite: false,       // 界面性能模式（关毛玻璃/背景动画，手机上更省电）
+    petAuto: true,         // 电子宠物自动表演（关掉后只有点它才动）
+    petOn: true,           // 电子宠物是否在运行（关掉 = 整层停止，不再渲染）
+    loadErr: '',           // 设置读取失败原因（失败也要给出口，不能一直停在骨架屏）
   }),
   computed: {
     // 云端模式：端口与本地 zip 备份不适用（数据由云数据库/云存储托管）
     isCloud() { return window.store.mode === 'cloud'; },
   },
-  async mounted() { await this.refresh(); },
+  async mounted() {
+    this.perfLite = window.__perfLiteOn ? window.__perfLiteOn() : false;
+    this.petAuto = window.__petAutoPlay ? window.__petAutoPlay.get() : true;
+    this.petOn = window.PetWidget && window.PetWidget.isEnabled ? window.PetWidget.isEnabled() : true;
+    try { await this.refresh(); } catch (e) { this.loadErr = (e && e.message) || '设置读取失败'; }
+  },
   methods: {
+    setPerf(on) {
+      this.perfLite = window.__setPerfLite ? window.__setPerfLite(on) : on;
+      this.msg = on ? '已开启性能模式：关闭毛玻璃与背景动画，手机更流畅、更省电' : '已关闭性能模式：恢复玻璃质感与背景光斑动画';
+    },
+    setPetAuto(on) {
+      this.petAuto = window.__petAutoPlay ? window.__petAutoPlay.set(on) : on;
+      this.msg = on ? '电子宠物会自己玩耍表演' : '电子宠物已改为「按需表演」：不打扰、不耗电，点它照样会动';
+    },
+    async reload() {
+      this.loadErr = '';
+      try { await this.refresh(); } catch (e) { this.loadErr = (e && e.message) || '设置读取失败'; }
+    },
+    setPetOn(on) {
+      if (!(window.PetWidget && window.PetWidget.setEnabled)) { this.msg = '宠物模块尚未加载，请刷新页面后再试'; return; }
+      this.petOn = window.PetWidget.setEnabled(on);
+      this.msg = on ? '电子宠物已重新开启，右下角见' : '电子宠物已停止：整层退出运行（不渲染、无动画），随时可在这里重新开启';
+    },
     async refresh() {
-      this.cfg = await api('GET', '/settings');
-      this.info = await api('GET', '/system/info');
-      this.backups = this.isCloud ? [] : await api('GET', '/backup/list');
+      // 三个请求并行发（原来是串行 await，手机上等于 3 个来回叠加，
+      // 这里是"切到设置页要等好几秒"的主因）
+      const [cfg, info, backups] = await Promise.all([
+        api('GET', '/settings'),
+        api('GET', '/system/info').catch(() => null),
+        this.isCloud ? Promise.resolve([]) : api('GET', '/backup/list').catch(() => []),
+      ]);
+      this.cfg = cfg;
+      this.info = info;
+      this.backups = backups || [];
+      this.loadErr = '';
     },
     async save() {
       this.busy = true; this.msg = ''; this.err = '';
@@ -63,8 +97,13 @@ window.Components.SettingsPage = {
   <section class="screen">
     <div class="page-title">{{ t('set.title') }}</div>
     <div class="page-sub">{{ t('set.sub') }}</div>
+    <page-skeleton v-if="!cfg && !loadErr" :rows="3"></page-skeleton>
+    <div class="glass card" v-else-if="loadErr">
+      <div class="empty">⚠️ {{ loadErr }}</div>
+      <div style="text-align:center;margin-top:10px"><button class="btn-main" @click="reload">重试</button></div>
+    </div>
 
-    <div class="settings">
+    <div class="settings" v-if="cfg">
       <div class="glass card" v-if="cfg">
         <h3 class="sec">🌐 {{ t('set.langTitle') }}</h3>
         <div class="seg" style="width:auto;justify-content:flex-start">
@@ -72,6 +111,41 @@ window.Components.SettingsPage = {
           <button class="chip" :class="{on: getLang()==='en'}" @click="pickLang('en')">English</button>
         </div>
         <div class="muted" style="margin-top:8px">{{ t('set.langNote') }}</div>
+      </div>
+
+      <div class="glass card" v-if="cfg">
+        <h3 class="sec">⚡ 界面性能（手机卡顿 / 发烫）</h3>
+        <div class="seg" style="width:auto;justify-content:flex-start">
+          <button class="chip" :class="{on: perfLite}" @click="setPerf(true)">性能优先</button>
+          <button class="chip" :class="{on: !perfLite}" @click="setPerf(false)">效果优先</button>
+        </div>
+        <div class="muted" style="margin-top:8px">
+          手机 / 触屏设备默认「性能优先」：关闭背景毛玻璃模糊与光斑漂移动画（这两项是持续占用 GPU、导致发烫的主因），
+          界面改用具玻璃质感的实心面板，观感接近但帧率稳定。电脑上默认「效果优先」，想看完整玻璃折射效果切回来即可。
+        </div>
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--rim-lo)">
+          <div style="margin-bottom:8px"><b>🐾 电子宠物自动表演</b></div>
+          <div class="seg" style="width:auto;justify-content:flex-start">
+            <button class="chip" :class="{on: petAuto}" @click="setPetAuto(true)">会自己玩耍</button>
+            <button class="chip" :class="{on: !petAuto}" @click="setPetAuto(false)">按需表演</button>
+          </div>
+          <div class="muted" style="margin-top:8px">
+            手机上默认「按需表演」：宠物待机时完全静止（0 动画、不占 CPU），点它或拖它照样会动。
+            自动表演虽然可爱，但等于让手机在你不操作时也一直跑动画——这是除图片之外最容易被忽略的耗电项。
+          </div>
+        </div>
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--rim-lo)">
+          <div style="margin-bottom:8px"><b>🐾 电子宠物模拟</b></div>
+          <div class="seg" style="width:auto;justify-content:flex-start">
+            <button class="chip" :class="{on: petOn}" @click="setPetOn(true)">运行中</button>
+            <button class="chip" :class="{on: !petOn}" @click="setPetOn(false)">已停止</button>
+          </div>
+          <div class="muted" style="margin-top:8px">
+            停止后宠物整层退出运行：不再渲染、不再跑任何动画和计时器，页面上一个宠物相关的元素都不会留下——
+            适合上课、开会或者只想安静整理东西的时候。想让它回来，点这里「运行中」，或点页面右下角那枚
+            「宠物已停止 · 点这里重新开启」的小胶囊即可；选择会记住，刷新后保持。
+          </div>
+        </div>
       </div>
 
       <div class="glass card" v-if="cfg">

@@ -2,10 +2,13 @@ window.Components = window.Components || {};
 window.Components.Studio = {
   data: () => ({
     tree: [],
+    loaded: false,        // 结构是否已拿到：没拿到时先显示骨架，别让用户对着"还没有区域"发愣
+    loadErr: '',          // 结构读取失败原因（可重试）
     aiText: '', aiBusy: false, aiMsg: '', preview: null,
     sel: null,            // {type:'zone'|'cabinet'|'shelf'|'box', id}
     editName: '',
     addChild: { name: '', door: 'single', kind: 'shelf', color: '' },
+    newZone: { name: '', pos: '' },   // 新建区域：名称 + 插入位置（'' 表示末尾）
     focusId: null,
     popup: null,          // 点击区域/柜子后的选项框 {type, id}
     album: null,          // 物品相册 {title, photo, items:[{id,name,qty,img,path}]}
@@ -52,7 +55,15 @@ window.Components.Studio = {
     }
   },
   methods: {
-    async load() { this.tree = await api('GET', '/structure'); },
+    async load() {
+      try {
+        this.tree = await api('GET', '/structure');
+        this.loadErr = '';
+      } catch (e) {
+        // 失败也要把骨架屏收掉：否则用户看到的是"永远在转"，比报错更难受
+        this.loadErr = (e && e.message) || '结构读取失败';
+      } finally { this.loaded = true; }
+    },
     select(type, id) { this.sel = { type, id }; const n = this.selNode; this.editName = n ? n.node.name : ''; },
     async generate() {
       if (!this.aiText.trim()) return;
@@ -73,10 +84,74 @@ window.Components.Studio = {
       finally { this.aiBusy = false; }
     },
     async addZone() {
-      const name = prompt('区域名称：', '区域' + ['一','二','三','四','五','六'][this.tree.length] || '');
-      if (!name) return;
-      const r = await api('POST', '/zones', { name });
-      this.tree = r.tree; this.select('zone', r.id);
+      const name = (this.newZone.name || '').trim();
+      if (!name) { alert('请输入区域名称'); return; }
+      const pos = this.newZone.pos === '' ? undefined : Number(this.newZone.pos);
+      const r = await api('POST', '/zones', { name, index: pos });
+      this.tree = r.tree;
+      this.newZone = { name: '', pos: '' };
+      this.select('zone', r.id);
+    },
+
+    // ---- 排序：区域 / 柜子 / 层 / 箱 ----
+    // 排序按「同级」重写 sort；柜子在树里按楼层分组显示，所以柜子的顺序
+    // 按 楼层升序 + 楼层内顺序 摊平后整体提交，保证视觉顺序可预期。
+    async reorder(ent, ids) {
+      if (!ids || !ids.length) return;
+      try {
+        const r = await api('POST', '/structure/reorder', { ent, ids });
+        this.tree = r.tree;
+      } catch (e) { alert(e.message); }
+    },
+    flatCabinets(z) { return z.floors.flatMap((f) => f.cabinets.map((c) => c.id)); },
+    async moveZone(id, dir) {
+      const ids = window.TidyShared.moveInOrder(this.tree.map((z) => z.id), id, dir);
+      await this.reorder('zones', ids);
+    },
+    async moveCabinet(z, cabId, dir) {
+      const floor = z.floors.find((f) => f.cabinets.some((c) => c.id === cabId));
+      if (!floor) return;
+      const inFloor = floor.cabinets.map((c) => c.id);
+      const i = inFloor.indexOf(cabId);
+      const j = dir === 'up' ? i - 1 : i + 1;
+      if (j < 0 || j >= inFloor.length) return;
+      const flat = this.flatCabinets(z).slice();
+      const a = flat.indexOf(cabId);
+      const b = flat.indexOf(inFloor[j]);
+      if (a < 0 || b < 0) return;
+      flat[a] = inFloor[j]; flat[b] = cabId;
+      await this.reorder('cabinets', flat);
+    },
+    async moveShelf(cab, shelfId, dir) {
+      const ids = window.TidyShared.moveInOrder(cab.shelves.map((s) => s.id), shelfId, dir);
+      await this.reorder('shelves', ids);
+    },
+    async moveBox(shelf, boxId, dir) {
+      const ids = window.TidyShared.moveInOrder(shelf.boxes.map((b) => b.id), boxId, dir);
+      await this.reorder('boxes', ids);
+    },
+    // 编辑面板里给当前选中节点做上下移动（层 / 箱）
+    async moveSelected(dir) {
+      if (!this.sel) return;
+      if (this.sel.type === 'shelf') {
+        const cab = this.findParentCabinet(this.sel.id);
+        if (cab) await this.moveShelf(cab, this.sel.id, dir);
+      } else if (this.sel.type === 'box') {
+        const sh = this.findParentShelf(this.sel.id);
+        if (sh) await this.moveBox(sh, this.sel.id, dir);
+      }
+    },
+    findParentCabinet(shelfId) {
+      for (const z of this.tree) for (const f of z.floors) for (const c of f.cabinets) {
+        if (c.shelves.some((s) => s.id === shelfId)) return c;
+      }
+      return null;
+    },
+    findParentShelf(boxId) {
+      for (const z of this.tree) for (const f of z.floors) for (const c of f.cabinets) for (const s of c.shelves) {
+        if ((s.boxes || []).some((b) => b.id === boxId)) return s;
+      }
+      return null;
     },
     async addChildEntity() {
       const a = this.addChild;
@@ -178,7 +253,9 @@ window.Components.Studio = {
       const cabId = this.photoTarget;
       if (!f || !cabId) return;
       const fd = new FormData();
-      fd.append('image', f);
+      // 手机原图先等比压到长边 1600，别把 4MB 照片塞进柜子缩略图
+      const small = window.shrinkImage ? await window.shrinkImage(f) : f;
+      fd.append('image', small);
       try {
         const r = await api('POST', `/cabinets/${cabId}/photo`, fd);
         this.tree = r.tree;
@@ -208,7 +285,13 @@ window.Components.Studio = {
     <div class="page-title">收纳空间</div>
     <div class="page-sub">左侧 AI 对话生成，右侧 2D 可视化编辑 · 点柜子可加实拍照片、看物品相册</div>
 
-    <div class="studio">
+    <page-skeleton v-if="!loaded" :rows="3"></page-skeleton>
+    <div class="glass card" v-else-if="loadErr">
+      <div class="empty">⚠️ {{ loadErr }}</div>
+      <div style="text-align:center;margin-top:10px"><button class="btn-main" @click="load">重试</button></div>
+    </div>
+
+    <div class="studio" v-if="loaded && !loadErr">
       <div class="ai-panel glass card">
         <h3 class="sec">✨ AI 对话生成</h3>
         <div v-if="aiMsg" class="msg ai">{{ aiMsg }}</div>
@@ -233,22 +316,37 @@ window.Components.Studio = {
             <button class="btn-main" :disabled="aiBusy" @click="generate">{{ aiBusy ? '生成中…' : '生成' }}</button>
           </div>
         </div>
-        <div class="form-row" style="margin-top:18px">
-          <button class="btn-ghost" @click="addZone">＋ 新建区域</button>
+        <h3 class="sec" style="margin-top:18px">🗺️ 新建区域</h3>
+        <div class="form-row">
+          <input v-model="newZone.name" placeholder="区域名称，如「一号仓库」" style="flex:1" @keyup.enter="addZone">
+          <select v-model="newZone.pos" style="width:124px" title="新建后放在第几位">
+            <option value="">排最后</option>
+            <option v-for="(z, i) in tree" :key="'zp'+z.id" :value="i">插到第 {{ i + 1 }} 位</option>
+          </select>
+          <button class="btn-main" @click="addZone">新建</button>
         </div>
+        <div class="hint-mini">建好之后还能用 ▲▼ 随时调整区域、柜子、层与箱子的顺序</div>
       </div>
 
       <div class="canvas glass card">
         <div v-if="!tree.length" class="empty">还没有区域 · 在左侧用 AI 生成或点击「新建区域」</div>
-        <div v-for="z in tree" :key="z.id" style="margin-bottom:22px">
+        <div v-for="(z, zi) in tree" :key="z.id" style="margin-bottom:22px">
           <div class="zone-head"><span class="zone-tag" @click="openPopup('zone', z.id)" style="cursor:pointer" title="点击查看选项与物品相册">{{ z.name }}</span>
+            <span class="ord">
+              <button class="ord-btn" title="上移区域" :disabled="zi===0" @click.stop="moveZone(z.id,'up')">▲</button>
+              <button class="ord-btn" title="下移区域" :disabled="zi===tree.length-1" @click.stop="moveZone(z.id,'down')">▼</button>
+            </span>
             <span class="zone-meta">点击区域 / 柜子 → 查看物品相册或继续创建</span></div>
           <div class="floor" v-for="f in z.floors" :key="f.floor">
             <div class="floor-name">第 {{ ['一','二','三','四','五','六'][f.floor-1] || f.floor }} 层</div>
             <div class="cabs">
-              <div class="cab" :class="[c.door, {focused: focusId===c.id}]" v-for="c in f.cabinets" :key="c.id" @click="openPopup('cabinet', c.id)" :title="'点击查看 ' + c.name + ' 的物品相册'">
-                <div class="cab-photo" v-if="c.photo"><img :src="imgSrc(c.photo)" :alt="c.name"></div>
+              <div class="cab" :class="[c.door, {focused: focusId===c.id}]" v-for="(c, ci) in f.cabinets" :key="c.id" @click="openPopup('cabinet', c.id)" :title="'点击查看 ' + c.name + ' 的物品相册'">
+                <div class="cab-photo" v-if="c.photo"><img :src="imgSrc(c.photo, 640)" :alt="c.name" loading="lazy" decoding="async"></div>
                 <div class="cab-name"><span>{{ c.name }} {{ doorLabel[c.door] }}<template v-if="c.photo"> · 📷</template></span><span class="muted">{{ c.occupancy }}%</span></div>
+                <div class="cab-ord">
+                  <button class="ord-btn" title="柜子上移" :disabled="ci===0" @click.stop="moveCabinet(z,c.id,'up')">▲</button>
+                  <button class="ord-btn" title="柜子下移" :disabled="ci===f.cabinets.length-1" @click.stop="moveCabinet(z,c.id,'down')">▼</button>
+                </div>
                 <div class="boxes">
                   <template v-for="s in c.shelves" :key="s.id">
                     <span class="box" v-for="b in s.boxes" :key="b.id" @click.stop="select('box', b.id)">
@@ -289,6 +387,12 @@ window.Components.Studio = {
             <select :value="selNode.node.kind" @change="changeKind($event.target.value)" style="flex:1">
               <option value="shelf">层板格位</option><option value="drawer">抽屉</option>
             </select>
+          </div>
+          <div class="form-row" v-if="sel.type==='shelf' || sel.type==='box'">
+            <label>顺序</label>
+            <button class="btn-ghost" @click="moveSelected('up')">▲ 上移</button>
+            <button class="btn-ghost" @click="moveSelected('down')">▼ 下移</button>
+            <span class="muted" style="font-size:12px">与同一柜子里的其它{{ sel.type==='shelf' ? '层/抽屉' : '箱子' }}交换位置</span>
           </div>
           <div class="form-row" v-if="sel.type!=='box'">
             <label>添加子级</label>
@@ -344,12 +448,12 @@ window.Components.Studio = {
           <button class="btn-ghost" @click="album=null">关闭</button>
         </div>
         <div class="album-cab" v-if="album.photo">
-          <img :src="imgSrc(album.photo)" :alt="album.title">
+          <img :src="imgSrc(album.photo, 1280)" :alt="album.title" loading="lazy" decoding="async">
           <div class="album-cab-cap muted">📷 该柜子的实拍照片</div>
         </div>
         <div class="album-grid" v-if="album.items.length">
           <div class="album-card" v-for="(it, i) in album.items" :key="i" @click="openItem(it.id)">
-            <div class="album-photo"><img v-if="it.img" :src="imgSrc(it.img)"><span v-else>📦</span></div>
+            <div class="album-photo"><img v-if="it.img" :src="imgSrc(it.img, 320)" loading="lazy" decoding="async"><span v-else>📦</span></div>
             <div class="album-name">{{ it.name }}</div>
             <div class="album-meta"><b v-if="it.qty>1">×{{ it.qty }}</b> {{ it.path }}</div>
           </div>

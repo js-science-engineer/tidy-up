@@ -1,12 +1,14 @@
 window.Components = window.Components || {};
 
-// 六个主要模块的清单。顺序由用户自己决定（存在 localStorage），
+// 主要模块清单。顺序由用户自己决定（存在 localStorage），
 // 排在第一位的模块同时也是"打开网站时的首页"。
+// cloudOnly：仅云端模式显示（本地单机模式没有账号体系，也就没有"实验室共享空间"）
 window.NAV_MODULES = [
   { key: 'dashboard', icon: '🏠', label: '总览', hash: '#/dashboard' },
   { key: 'studio', icon: '🗄️', label: '收纳空间', hash: '#/studio' },
   { key: 'scan', icon: '📸', label: '识别入库', hash: '#/scan' },
   { key: 'search', icon: '🔍', label: '搜索', hash: '#/search' },
+  { key: 'lab', icon: '🧪', label: '实验室', hash: '#/lab', cloudOnly: true },
   { key: 'stats', icon: '📊', label: '统计看板', hash: '#/stats' },
   { key: 'settings', icon: '⚙️', label: '设置', hash: '#/settings' },
 ];
@@ -40,7 +42,8 @@ window.Components.SideNav = {
   computed: {
     modules() {
       const byKey = new Map(window.NAV_MODULES.map((m) => [m.key, m]));
-      return this.order.map((k) => byKey.get(k)).filter(Boolean);
+      const isCloud = window.store && window.store.mode === 'cloud';
+      return this.order.map((k) => byKey.get(k)).filter((m) => m && (!m.cloudOnly || isCloud));
     },
   },
   methods: {

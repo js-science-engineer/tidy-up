@@ -142,7 +142,7 @@ test('M7.11 system/info：版本号与云模式标记（本地默认 false）', 
   const s = await startServer();
   t.after(() => stop(s.proc));
   const info = (await api(s.base, 'GET', '/system/info')).json.data;
-  assert.equal(info.version, '0.7.0');
+  assert.equal(info.version, '0.9.0');
   assert.equal(info.cloud, false, '本地开发未设 TIDY_CLOUD 应为 false');
 });
 
@@ -198,4 +198,78 @@ test('M7.13 recognizer.analyze：类别白名单 / 字段规范化 / 批量 bbox
   assert.equal(rec.items[1].name, '未知物品', '空 name 回落未知物品');
   assert.equal(rec.items[1].category, '工具', '合法类别保留');
   assert.equal(rec.webQuery, 'dupont wire');
+});
+
+// ---------- M7.14 system/info：请求域名与 endpoint 同域 → 云端模式 ----------
+// 回归背景：云端模式的原始开关是 TIDY_CLOUD=1。线上重新发布时启动命令会被重新探测，
+// 环境变量一旦丢失，服务端就静默报 cloud:false，前端整体退回本地单机模式
+// （表现为：没有登录页、顶栏没有空间胶囊、侧边栏没有「实验室」）。
+// 因此判定改为「存在 cloud-config.json 且（TIDY_CLOUD=1 或请求域名与 endpoint 同域）」。
+function requestWithHost(port, headers) {
+  return new Promise((resolve, reject) => {
+    const req = require('http').request(
+      { host: '127.0.0.1', port, path: '/api/system/info', method: 'GET', headers: { ...headers, Connection: 'close' } },
+      (res) => {
+        let b = '';
+        res.on('data', (d) => (b += d));
+        res.on('end', () => { try { resolve(JSON.parse(b)); } catch (e) { reject(e); } });
+      },
+    );
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+test('M7.14 system/info：请求域名与 endpoint 同域时识别为云端模式', async (t) => {
+  const s = await startServer();
+  t.after(() => stop(s.proc));
+  const EP = 'https://tidylab.app.workbuddy.host';
+
+  const fwd = await requestWithHost(s.port, { 'X-Forwarded-Host': EP.replace('https://', '') });
+  assert.equal(fwd.data.cloud.endpoint, EP, '反向代理转发的 x-forwarded-host 应命中');
+
+  const direct = await requestWithHost(s.port, { Host: EP.replace('https://', '') });
+  assert.equal(direct.data.cloud.endpoint, EP, '直接 Host 也应命中');
+
+  const withPort = await requestWithHost(s.port, { Host: EP.replace('https://', '') + ':443' });
+  assert.equal(withPort.data.cloud.endpoint, EP, 'Host 带端口也要能命中');
+
+  const local = await requestWithHost(s.port, { Host: 'localhost:' + s.port });
+  assert.equal(local.data.cloud, false, '非云端域名仍应是本地模式');
+
+  const fake = await requestWithHost(s.port, { Host: 'tidylab.app.workbuddy.host.evil.com' });
+  assert.equal(fake.data.cloud, false, '后缀冒充域名不应命中（必须完全相等）');
+});
+
+// ---------- M7.15 云端启动入口：不靠环境变量也能进云端模式 ----------
+// 发布时必须用 `npm run start:cloud`（内部 server/start-cloud.js 自行设置 TIDY_CLOUD=1）。
+// 这样即便部署流程重新探测启动命令、丢掉环境变量，线上也不会静默退回本地模式。
+test('M7.15 start-cloud 入口：未设 TIDY_CLOUD 也应返回云配置', async (t) => {
+  const dataDir = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'tidy-cloudent-'));
+  const env = { ...process.env, PORT: '0', TIDY_DATA_DIR: dataDir };
+  delete env.TIDY_CLOUD;                       // 明确不带开关，验证入口脚本自己会设
+  const proc = spawn(process.env.NODE_EXE || process.execPath, ['server/start-cloud.js'], {
+    cwd: require('path').join(__dirname, '..'),
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let out = '';
+  proc.stdout.on('data', (d) => (out += d));
+  proc.stderr.on('data', (d) => (out += d));
+  try {
+    let port = 0;
+    const deadline = Date.now() + 25000;
+    while (Date.now() < deadline) {
+      const m = /TidyLab listening on http:\/\/localhost:(\d+)/.exec(out);
+      if (m) { port = Number(m[1]); break; }
+      if (proc.exitCode !== null) break;
+      await new Promise((r) => setTimeout(r, 80));
+    }
+    assert.ok(port, '云端入口应能启动：\n' + out);
+    const j = await (await fetch(`http://127.0.0.1:${port}/api/system/info`)).json();
+    assert.equal(j.data.cloud.endpoint, 'https://tidylab.app.workbuddy.host');
+    assert.ok(String(j.data.cloud.publishableKey).startsWith('wbpk_'));
+  } finally {
+    stop(proc);
+  }
 });

@@ -40,7 +40,9 @@ window.Components.StatsPage = {
   <section class="screen">
     <div class="page-title">统计看板</div>
     <div class="page-sub" v-if="b">库房全局数据一览 · 近 7 天入库 {{ trendTotal.inQty }} 件 / 出库 {{ trendTotal.outQty }} 件</div>
+    <div class="page-sub" v-else-if="!error">正在统计…</div>
     <div class="ai-hint" v-if="error">⚠️ {{ error }}</div>
+    <page-skeleton v-if="!b && !error" :rows="4" chart></page-skeleton>
 
     <div class="stats stats-5" v-if="b">
       <div class="stat glass lift"><div class="ic">📦</div><div class="num">{{ b.totals.items }}</div><div class="lbl">物品种类</div></div>
@@ -96,7 +98,7 @@ window.Components.StatsPage = {
         <div class="today-row" v-for="(it, i) in b.topItems" :key="it.id" @click="openItem(it.id)" style="cursor:pointer">
           <span class="chip">{{ i + 1 }}</span>
           <div class="recog-img" style="width:38px;height:38px;font-size:16px">
-            <img v-if="it.img" :src="imgSrc(it.img)"><span v-else>📦</span>
+            <img v-if="it.img" :src="imgSrc(it.img, 160)" loading="lazy" decoding="async"><span v-else>📦</span>
           </div>
           <div class="grow">{{ it.name }} <span class="muted">{{ it.category || '未分类' }}</span></div>
           <span class="chip">{{ it.spots }} 处存放</span>
@@ -120,7 +122,7 @@ window.Components.StatsPage = {
         <div class="today-row" v-for="l in filteredLogs" :key="l.id" @click="openItem(l.item_id)" style="cursor:pointer">
           <span class="chip" :class="{on: l.action==='in'}">{{ actionName(l.action) }}</span>
           <div class="recog-img" style="width:34px;height:34px;font-size:15px">
-            <img v-if="l.img" :src="imgSrc(l.img)"><span v-else>📦</span>
+            <img v-if="l.img" :src="imgSrc(l.img, 160)" loading="lazy" decoding="async"><span v-else>📦</span>
           </div>
           <div class="grow">
             <b>{{ l.item_name || '（物品已删除）' }}</b>

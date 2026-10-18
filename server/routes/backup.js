@@ -96,6 +96,9 @@ router.post('/restore', wrap(async (req, res) => {  const file = String(req.body
   if (fs.existsSync(newImages)) {
     fs.rmSync(IMAGES_DIR, { recursive: true, force: true });
     fs.renameSync(newImages, IMAGES_DIR);
+    // 缩略图是派生缓存：换了一批图必须一起清掉，否则会拿旧缩略图对上同名文件，
+    // 界面上就会出现"照片和物品不对应"的怪问题（缓存判断只看文件修改时间）。
+    try { fs.rmSync(path.join(DATA_DIR, 'thumbs'), { recursive: true, force: true }); } catch { /* ignore */ }
   }
   fs.rmSync(tmp, { recursive: true, force: true });
 
